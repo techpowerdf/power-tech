@@ -1,0 +1,705 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Padrão para todos os campos de preenchimento em Caixa Alta */
+  input[type="text"],
+  input[type="search"],
+  input:not([type]),
+  textarea {
+    text-transform: uppercase;
+  }
+
+  input[type="email"],
+  .normal-case,
+  input.normal-case,
+  textarea.normal-case {
+    text-transform: lowercase;
+  }
+
+  input[type="password"] {
+    text-transform: none;
+  }
+
+  /* Correção global para selects e opções no Windows/Chromium (evita menu branco com texto branco) */
+  select {
+    color-scheme: dark;
+  }
+  select option {
+    background-color: #0f172a !important;
+    color: #f8fafc !important;
+  }
+}
+
+[data-theme="claro"] select {
+  color-scheme: light !important;
+}
+[data-theme="claro"] select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.7);
+}
+
+/* Print utilities */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 5mm 6mm;
+  }
+
+  html,
+  body,
+  #root,
+  #root > div,
+  .app-root-shell {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* Esconde toda a interface do sistema mantendo apenas o documento impresso */
+  #root > div > *:not(.print-modal-overlay) {
+    display: none !important;
+  }
+
+  .print-modal-overlay {
+    position: static !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+  }
+
+  .print-modal-box {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-modal-body {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+  }
+
+  #printable-document {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    min-height: auto !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    display: block !important;
+  }
+
+  #printable-document * {
+    box-sizing: border-box !important;
+  }
+
+  #printable-thermal {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 76mm !important;
+    max-width: 76mm !important;
+    margin: 0 !important;
+    padding: 3mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    display: block !important;
+  }
+}
+
+/* ========================================================
+   CONFIGURAÇÕES VISUAIS: TIPOGRAFIA & TAMANHOS DE FONTE
+   ======================================================== */
+
+:root {
+  --app-font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --footer-font-size: 11px;
+}
+
+/* 1. Tipos de Fonte */
+[data-font-family="system"] {
+  --app-font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+[data-font-family="inter"] {
+  --app-font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+[data-font-family="roboto"] {
+  --app-font-family: 'Roboto', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+[data-font-family="segoe"] {
+  --app-font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+}
+[data-font-family="poppins"] {
+  --app-font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+[data-font-family="opensans"] {
+  --app-font-family: 'Open Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+[data-font-family="fira"] {
+  --app-font-family: 'Fira Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+body,
+#root,
+button,
+input,
+select,
+textarea {
+  font-family: var(--app-font-family, 'Plus Jakarta Sans', system-ui, sans-serif) !important;
+}
+
+/* 2. Tamanho da Fonte de Texto (Geral / Corpo) */
+[data-font-size-text="pequeno"] {
+  --text-xs: 0.6875rem;
+  --text-sm: 0.775rem;
+  --text-base: 0.875rem;
+}
+[data-font-size-text="padrao"] {
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+}
+[data-font-size-text="medio"] {
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-base: 1.0625rem;
+}
+[data-font-size-text="grande"] {
+  --text-xs: 0.875rem;
+  --text-sm: 1rem;
+  --text-base: 1.125rem;
+}
+[data-font-size-text="extra_grande"] {
+  --text-xs: 0.9375rem;
+  --text-sm: 1.0625rem;
+  --text-base: 1.25rem;
+}
+
+/* 3. Tamanho da Fonte de Títulos */
+[data-font-size-heading="compacto"] {
+  --text-lg: 1rem;
+  --text-xl: 1.125rem;
+  --text-2xl: 1.3rem;
+  --text-3xl: 1.55rem;
+}
+[data-font-size-heading="padrao"] {
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+}
+[data-font-size-heading="grande"] {
+  --text-lg: 1.25rem;
+  --text-xl: 1.4rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.15rem;
+}
+[data-font-size-heading="destaque"] {
+  --text-lg: 1.375rem;
+  --text-xl: 1.6rem;
+  --text-2xl: 2rem;
+  --text-3xl: 2.5rem;
+}
+
+/* 4. Tamanho da Fonte do Rodapé */
+[data-font-size-footer="pequeno"] {
+  --footer-font-size: 9.5px;
+}
+[data-font-size-footer="padrao"] {
+  --footer-font-size: 11px;
+}
+[data-font-size-footer="medio"] {
+  --footer-font-size: 12.5px;
+}
+[data-font-size-footer="grande"] {
+  --footer-font-size: 14px;
+}
+
+aside > div:last-child,
+aside > div:last-child span,
+.app-footer,
+.table-footer {
+  font-size: var(--footer-font-size, 11px) !important;
+}
+
+/* ========================================================
+   CUSTOMIZAÇÕES VISUAIS AVANÇADAS (LOGO, NOME, ABAS, ÍCONES, CORES)
+   ======================================================== */
+:root {
+  --app-logo-size: 44px;
+  --app-store-name-size: 14px;
+  --app-store-name-color: #ffffff;
+  --app-tab-font-size: 12px;
+  --app-tab-active-color: #2563eb;
+  --app-tab-active-text: #ffffff;
+  --app-icon-size: 18px;
+  --app-badge-font-size: 10px;
+  --app-price-color: #34d399;
+  --app-primary-color: #2563eb;
+}
+
+.app-brand-logo {
+  width: var(--app-logo-size, 44px) !important;
+  height: var(--app-logo-size, 44px) !important;
+  transition: width 0.2s ease, height 0.2s ease;
+}
+
+.app-store-name {
+  font-size: var(--app-store-name-size, 14px) !important;
+  color: var(--app-store-name-color, #ffffff) !important;
+  transition: font-size 0.2s ease, color 0.2s ease;
+}
+
+.app-selection-tab {
+  font-size: var(--app-tab-font-size, 12px) !important;
+  transition: font-size 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.app-selection-tab-active {
+  background-color: var(--app-tab-active-color, #2563eb) !important;
+  color: var(--app-tab-active-text, #ffffff) !important;
+  border-color: var(--app-tab-active-color, #2563eb) !important;
+}
+
+.app-dynamic-icon {
+  width: var(--app-icon-size, 18px) !important;
+  height: var(--app-icon-size, 18px) !important;
+  transition: width 0.2s ease, height 0.2s ease;
+}
+
+.app-status-badge {
+  font-size: var(--app-badge-font-size, 10px) !important;
+}
+
+.app-price-highlight {
+  color: var(--app-price-color, #34d399) !important;
+}
+
+/* ========================================================
+   TEMA CLARO (LIGHT)
+   ======================================================== */
+[data-theme="claro"] {
+  color-scheme: light;
+}
+
+[data-theme="claro"] body,
+[data-theme="claro"] .app-root-shell,
+[data-theme="claro"] main {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+/* Sidebar no tema Claro */
+[data-theme="claro"] aside {
+  background-color: #ffffff !important;
+  border-right-color: #e2e8f0 !important;
+}
+[data-theme="claro"] aside .border-b,
+[data-theme="claro"] aside .border-t,
+[data-theme="claro"] aside .border-slate-800,
+[data-theme="claro"] aside .border-slate-800\/80,
+[data-theme="claro"] aside .border-slate-800\/60 {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="claro"] aside h1,
+[data-theme="claro"] aside .text-white {
+  color: #0f172a !important;
+}
+[data-theme="claro"] aside nav button {
+  color: #475569 !important;
+}
+[data-theme="claro"] aside nav button:hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+[data-theme="claro"] aside nav button .text-slate-400 {
+  color: #64748b !important;
+}
+[data-theme="claro"] aside nav button:hover .text-slate-400 {
+  color: #0f172a !important;
+}
+[data-theme="claro"] aside .bg-slate-950,
+[data-theme="claro"] aside .bg-slate-950\/80,
+[data-theme="claro"] aside .bg-slate-950\/60 {
+  background-color: #f8fafc !important;
+}
+[data-theme="claro"] aside .bg-slate-800\/80,
+[data-theme="claro"] aside .bg-slate-800 {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: #cbd5e1 !important;
+}
+[data-theme="claro"] aside .bg-slate-800\/80:hover {
+  background-color: #e2e8f0 !important;
+}
+
+/* Header no tema Claro */
+[data-theme="claro"] header {
+  background-color: #ffffff !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+[data-theme="claro"] header h2,
+[data-theme="claro"] header .text-white {
+  color: #0f172a !important;
+}
+[data-theme="claro"] header .text-slate-400,
+[data-theme="claro"] header .text-slate-300 {
+  color: #64748b !important;
+}
+[data-theme="claro"] header .bg-slate-800\/80,
+[data-theme="claro"] header .bg-slate-800 {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Containers, Cartões e Tabelas no tema Claro */
+[data-theme="claro"] .bg-slate-950,
+[data-theme="claro"] .bg-slate-900 {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+}
+[data-theme="claro"] .bg-slate-950\/80,
+[data-theme="claro"] .bg-slate-950\/60,
+[data-theme="claro"] .bg-slate-950\/40,
+[data-theme="claro"] .bg-slate-900\/90,
+[data-theme="claro"] .bg-slate-900\/80,
+[data-theme="claro"] .bg-slate-900\/60,
+[data-theme="claro"] .bg-slate-900\/50,
+[data-theme="claro"] .bg-slate-900\/40,
+[data-theme="claro"] .bg-slate-800,
+[data-theme="claro"] .bg-slate-800\/80,
+[data-theme="claro"] .bg-slate-800\/60,
+[data-theme="claro"] .bg-slate-800\/40,
+[data-theme="claro"] .bg-slate-800\/30 {
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+}
+
+[data-theme="claro"] .border-slate-800,
+[data-theme="claro"] .border-slate-800\/80,
+[data-theme="claro"] .border-slate-800\/60,
+[data-theme="claro"] .border-slate-700,
+[data-theme="claro"] .border-slate-700\/80,
+[data-theme="claro"] .border-slate-700\/60,
+[data-theme="claro"] .border-slate-600 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Textos no tema Claro */
+[data-theme="claro"] .text-white,
+[data-theme="claro"] .text-slate-100 {
+  color: #0f172a !important;
+}
+[data-theme="claro"] .text-slate-200,
+[data-theme="claro"] .text-slate-300 {
+  color: #1e293b !important;
+}
+[data-theme="claro"] .text-slate-400 {
+  color: #64748b !important;
+}
+[data-theme="claro"] .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+/* Inputs, Selects e Textareas no tema Claro */
+[data-theme="claro"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="claro"] select,
+[data-theme="claro"] textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+[data-theme="claro"] input::placeholder,
+[data-theme="claro"] textarea::placeholder {
+  color: #94a3b8 !important;
+}
+[data-theme="claro"] input:focus,
+[data-theme="claro"] select:focus,
+[data-theme="claro"] textarea:focus {
+  border-color: #3b82f6 !important;
+  background-color: #ffffff !important;
+}
+
+/* Tabelas no tema Claro */
+[data-theme="claro"] thead {
+  background-color: #f8fafc !important;
+}
+[data-theme="claro"] tbody tr:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* Modais no tema Claro */
+[data-theme="claro"] .fixed.inset-0.bg-black\/70,
+[data-theme="claro"] .fixed.inset-0.bg-black\/60,
+[data-theme="claro"] .fixed.inset-0.bg-black\/80 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+
+/* Botões coloridos preservam texto branco */
+[data-theme="claro"] .bg-blue-600,
+[data-theme="claro"] .bg-blue-600 *,
+[data-theme="claro"] .bg-blue-500,
+[data-theme="claro"] .bg-blue-500 *,
+[data-theme="claro"] .bg-emerald-600,
+[data-theme="claro"] .bg-emerald-600 *,
+[data-theme="claro"] .bg-emerald-500,
+[data-theme="claro"] .bg-emerald-500 *,
+[data-theme="claro"] .bg-rose-600,
+[data-theme="claro"] .bg-rose-600 *,
+[data-theme="claro"] .bg-amber-600,
+[data-theme="claro"] .bg-amber-600 *,
+[data-theme="claro"] .bg-purple-600,
+[data-theme="claro"] .bg-purple-600 * {
+  color: #ffffff !important;
+}
+
+/* Ajuste de contraste para textos com cor de status no tema Claro */
+[data-theme="claro"] .text-blue-400 { color: #2563eb !important; }
+[data-theme="claro"] .text-emerald-400 { color: #059669 !important; }
+[data-theme="claro"] .text-rose-400 { color: #e11d48 !important; }
+[data-theme="claro"] .text-amber-400 { color: #d97706 !important; }
+[data-theme="claro"] .text-purple-400 { color: #7c3aed !important; }
+
+/* Scrollbars no tema Claro */
+[data-theme="claro"] ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+[data-theme="claro"] ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+[data-theme="claro"] ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ========================================================
+   TEMA MISTO (MIXED) - Sidebar & Header Escuros, Miolo Claro
+   ======================================================== */
+[data-theme="misto"] {
+  color-scheme: light;
+}
+
+[data-theme="misto"] main {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+/* No tema misto, Sidebar e Header se mantêm escuros originais */
+[data-theme="misto"] aside {
+  background-color: #020617 !important;
+  border-right-color: #1e293b !important;
+}
+[data-theme="misto"] header {
+  background-color: #0f172a !important;
+  border-bottom-color: #1e293b !important;
+}
+
+/* Área de trabalho (main) e modais em modo claro */
+[data-theme="misto"] main .bg-slate-950,
+[data-theme="misto"] main .bg-slate-900,
+[data-theme="misto"] .fixed.inset-0 .bg-slate-950,
+[data-theme="misto"] .fixed.inset-0 .bg-slate-900 {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="misto"] main .bg-slate-950\/80,
+[data-theme="misto"] main .bg-slate-950\/60,
+[data-theme="misto"] main .bg-slate-900\/90,
+[data-theme="misto"] main .bg-slate-900\/80,
+[data-theme="misto"] main .bg-slate-900\/60,
+[data-theme="misto"] main .bg-slate-800,
+[data-theme="misto"] main .bg-slate-800\/80,
+[data-theme="misto"] main .bg-slate-800\/60,
+[data-theme="misto"] main .bg-slate-800\/40,
+[data-theme="misto"] .fixed.inset-0 .bg-slate-950\/80,
+[data-theme="misto"] .fixed.inset-0 .bg-slate-800 {
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+}
+
+[data-theme="misto"] main .border-slate-800,
+[data-theme="misto"] main .border-slate-800\/80,
+[data-theme="misto"] main .border-slate-800\/60,
+[data-theme="misto"] main .border-slate-700,
+[data-theme="misto"] main .border-slate-700\/80,
+[data-theme="misto"] main .border-slate-700\/60,
+[data-theme="misto"] .fixed.inset-0 .border-slate-800,
+[data-theme="misto"] .fixed.inset-0 .border-slate-700 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Textos no tema Misto dentro do main e modais */
+[data-theme="misto"] main .text-white,
+[data-theme="misto"] main .text-slate-100,
+[data-theme="misto"] .fixed.inset-0 .text-white,
+[data-theme="misto"] .fixed.inset-0 .text-slate-100 {
+  color: #0f172a !important;
+}
+[data-theme="misto"] main .text-slate-200,
+[data-theme="misto"] main .text-slate-300,
+[data-theme="misto"] .fixed.inset-0 .text-slate-200,
+[data-theme="misto"] .fixed.inset-0 .text-slate-300 {
+  color: #1e293b !important;
+}
+[data-theme="misto"] main .text-slate-400,
+[data-theme="misto"] .fixed.inset-0 .text-slate-400 {
+  color: #64748b !important;
+}
+[data-theme="misto"] main .text-slate-500,
+[data-theme="misto"] .fixed.inset-0 .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+/* Inputs, Selects e Textareas no tema Misto */
+[data-theme="misto"] main input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="misto"] main select,
+[data-theme="misto"] main textarea,
+[data-theme="misto"] .fixed.inset-0 input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="misto"] .fixed.inset-0 select,
+[data-theme="misto"] .fixed.inset-0 textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+[data-theme="misto"] main input::placeholder,
+[data-theme="misto"] main textarea::placeholder,
+[data-theme="misto"] .fixed.inset-0 input::placeholder,
+[data-theme="misto"] .fixed.inset-0 textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Tabelas no tema Misto */
+[data-theme="misto"] main thead {
+  background-color: #f8fafc !important;
+}
+[data-theme="misto"] main tbody tr:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* Botões coloridos no tema Misto */
+[data-theme="misto"] main .bg-blue-600,
+[data-theme="misto"] main .bg-blue-600 *,
+[data-theme="misto"] main .bg-emerald-600,
+[data-theme="misto"] main .bg-emerald-600 *,
+[data-theme="misto"] main .bg-rose-600,
+[data-theme="misto"] main .bg-rose-600 *,
+[data-theme="misto"] main .bg-amber-600,
+[data-theme="misto"] main .bg-amber-600 *,
+[data-theme="misto"] .fixed.inset-0 .bg-blue-600,
+[data-theme="misto"] .fixed.inset-0 .bg-blue-600 * {
+  color: #ffffff !important;
+}
+
+/* Contraste de cores no tema Misto */
+[data-theme="misto"] main .text-blue-400 { color: #2563eb !important; }
+[data-theme="misto"] main .text-emerald-400 { color: #059669 !important; }
+[data-theme="misto"] main .text-rose-400 { color: #e11d48 !important; }
+[data-theme="misto"] main .text-amber-400 { color: #d97706 !important; }
+[data-theme="misto"] main .text-purple-400 { color: #7c3aed !important; }
+
+/* Scrollbars no tema Misto para área main */
+[data-theme="misto"] main::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+[data-theme="misto"] main::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+[data-theme="misto"] main::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Customizações Visuais Dinâmicas */
+.app-customer-name {
+  font-size: var(--app-customer-name-size, 13px) !important;
+  color: var(--app-customer-name-color, #e2e8f0) !important;
+}
+
+.app-os-number {
+  font-size: var(--app-os-number-size, 14px) !important;
+  color: var(--app-os-number-color, #38bdf8) !important;
+}
+
+.app-action-icon {
+  width: var(--app-action-icon-size, 14px) !important;
+  height: var(--app-action-icon-size, 14px) !important;
+  min-width: var(--app-action-icon-size, 14px) !important;
+  min-height: var(--app-action-icon-size, 14px) !important;
+}
+
+.app-status-badge {
+  font-size: var(--app-badge-font-size, 10px) !important;
+  padding: var(--app-badge-padding, 2px 9px) !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+}

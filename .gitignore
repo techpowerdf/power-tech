@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production build outputs
+dist/
+dist-ssr/
+build/
+
+# Binaries
+*.exe
+cloudflared.exe
+
+# Database & Sensitive Data (REPOSITÓRIO PÚBLICO: NUNCA SUBIR DADOS DA LOJA)
+data/*
+!data/database.example.json
+*.backup*
+*.tmp*
+OneDrive*
+OneDrive - Personal/
+*.log
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vercel
+.vercel
+
+# System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+download_git.ps1
