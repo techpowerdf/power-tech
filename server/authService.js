@@ -163,10 +163,12 @@ function ensureDefaultAdminUser(db) {
     console.log(`[Segurança] Usuário administrador padrão configurado: "admin"`);
   } else {
     let updated = false;
-    if (!verifyPassword(initialPass, adminUser.passwordHash)) {
+    // Só define senha inicial se o administrador não tiver nenhum hash cadastrado.
+    // Nunca sobrescreve uma senha já configurada ou personalizada pelo usuário.
+    if (!adminUser.passwordHash) {
       adminUser.passwordHash = hashPassword(initialPass);
       updated = true;
-      console.log(`[Segurança] Senha padrão redefinida para o usuário admin`);
+      console.log(`[Segurança] Senha padrão inicial configurada para o usuário admin`);
     }
     if (adminUser.active === false || adminUser.role !== 'admin') {
       adminUser.active = true;

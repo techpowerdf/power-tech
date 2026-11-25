@@ -3,7 +3,7 @@ const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { getDatabase, saveDatabase } = require('./db');
+const { getDatabase, saveDatabase, ensureDatabaseLoaded } = require('./db');
 const { executeBackup, checkDailyBackup, restoreBackup, listPhysicalBackups } = require('./backupService');
 const { emitInvoice } = require('./fiscalService');
 const { sendViaWhatsAppDesktop, sendSalePdfViaWhatsAppDesktop, sendWorkOrderPdfViaWhatsAppDesktop } = require('./whatsappDesktopService');
@@ -29,6 +29,20 @@ const PORT = process.env.PORT || 4567;
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ limit: '25mb', extended: true }));
+
+// Middleware global para garantir carregamento do Supabase antes de processar qualquer requisição da API
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    try {
+      await ensureDatabaseLoaded();
+    } catch (err) {
+      console.error('[API Middleware DB Load Error]', err.message);
+      return res.status(503).json({ error: 'Falha ao conectar com o banco de dados em nuvem. Tente novamente.' });
+    }
+  }
+  next();
+});
+
 
 // Inicialização de segurança: garante usuário admin e gera tokens aleatórios para registros existentes
 const initialDb = getDatabase();
@@ -289,7 +303,7 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/auth/change-password', requireAuth, (req, res) => {
+app.post('/api/auth/change-password', requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
   if (!currentPassword || !newPassword) {
     return res.status(400).json({ error: 'Senha atual e nova senha são obrigatórias.' });
@@ -310,7 +324,7 @@ app.post('/api/auth/change-password', requireAuth, (req, res) => {
 
   db.users[userIndex].passwordHash = hashPassword(newPassword);
   db.users[userIndex].updatedAt = new Date().toISOString();
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.json({ success: true, message: 'Senha alterada com sucesso.' });
 });
@@ -330,7 +344,7 @@ app.post('/api/auth/verify-admin-password', requireAuth, (req, res) => {
 });
 
 // Atualização de Perfil (Login, Nome, Senha) para o usuário autenticado (incluindo o próprio admin)
-app.post('/api/auth/profile', requireAuth, (req, res) => {
+app.post('/api/auth/profile', requireAuth, async (req, res) => {
   const { name, username, currentPassword, newPassword } = req.body || {};
   if (!username || !name) {
     return res.status(400).json({ error: 'Nome e usuário de login são obrigatórios.' });
@@ -382,7 +396,7 @@ app.post('/api/auth/profile', requireAuth, (req, res) => {
   currentUser.name = cleanName;
   currentUser.username = cleanUsername;
   currentUser.updatedAt = new Date().toISOString();
-  saveDatabase(db);
+  await saveDatabase(db);
 
   const updatedPermissions = currentUser.permissions || req.user.permissions;
   const token = createToken({
@@ -449,7 +463,7 @@ app.get('/api/users', requireAuth, requireAdmin, (req, res) => {
   res.json({ users: safeUsers });
 });
 
-app.post('/api/users', requireAuth, requireAdmin, (req, res) => {
+app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
   const { name, username, password, role, permissions, active } = req.body || {};
   if (!name || !username || !password) {
     return res.status(400).json({ error: 'Nome, usuário e senha são obrigatórios.' });
@@ -512,7 +526,7 @@ app.post('/api/users', requireAuth, requireAdmin, (req, res) => {
   };
 
   db.users.push(newUser);
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.status(201).json({
     success: true,
@@ -529,7 +543,7 @@ app.post('/api/users', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
-app.put('/api/users/:id', requireAuth, requireAdmin, (req, res) => {
+app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, username, password, role, permissions, active } = req.body || {};
 
@@ -596,7 +610,7 @@ app.put('/api/users/:id', requireAuth, requireAdmin, (req, res) => {
   }
 
   targetUser.updatedAt = new Date().toISOString();
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.json({
     success: true,
@@ -614,7 +628,7 @@ app.put('/api/users/:id', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
-app.delete('/api/users/:id', requireAuth, requireAdmin, requireAdminPassword, (req, res) => {
+app.delete('/api/users/:id', requireAuth, requireAdmin, requireAdminPassword, async (req, res) => {
   const { id } = req.params;
   if (id === req.user.id) {
     return res.status(400).json({ error: 'Você não pode excluir sua própria conta enquanto estiver conectado.' });
@@ -634,7 +648,7 @@ app.delete('/api/users/:id', requireAuth, requireAdmin, requireAdminPassword, (r
   }
 
   db.users = db.users.filter((u) => u.id !== id);
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.json({ success: true, message: 'Usuário excluído com sucesso.' });
 });
@@ -1287,7 +1301,7 @@ app.get('/api/work-orders', requireAuth, (req, res) => {
   res.json(sortedList);
 });
 
-app.post('/api/work-orders', requireAuth, (req, res) => {
+app.post('/api/work-orders', requireAuth, async (req, res) => {
   const db = getDatabase();
   const nextNumber = ((db.workOrders || []).reduce((max, o) => Math.max(max, o.number || 1000), 1000)) + 1;
 
@@ -1377,12 +1391,12 @@ app.post('/api/work-orders', requireAuth, (req, res) => {
 
   if (!db.workOrders) db.workOrders = [];
   db.workOrders.unshift(newOS);
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.status(201).json(newOS);
 });
 
-app.put('/api/work-orders/:id', requireAuth, (req, res) => {
+app.put('/api/work-orders/:id', requireAuth, async (req, res) => {
   const db = getDatabase();
   const index = (db.workOrders || []).findIndex(o => o.id === req.params.id);
   if (index === -1) {
@@ -1490,7 +1504,7 @@ app.put('/api/work-orders/:id', requireAuth, (req, res) => {
   };
 
   db.workOrders[index] = updated;
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.json(updated);
 });
@@ -1571,7 +1585,7 @@ app.get('/api/work-orders/track/:id', (req, res) => {
 });
 
 // Adiciona itens (serviços ou peças, cadastrados ou avulsos) diretamente à OS
-app.post('/api/work-orders/:id/items', requireAuth, (req, res) => {
+app.post('/api/work-orders/:id/items', requireAuth, async (req, res) => {
   const db = getDatabase();
   const index = (db.workOrders || []).findIndex(o => 
     o.id === req.params.id || String(o.number) === req.params.id
@@ -1632,7 +1646,7 @@ app.post('/api/work-orders/:id/items', requireAuth, (req, res) => {
     os.paymentStatus = req.body.paymentStatus;
   }
 
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(os);
 });
 
@@ -1695,7 +1709,7 @@ app.get('/api/sales/track/:id', (req, res) => {
   });
 });
 
-app.delete('/api/work-orders/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/work-orders/:id', requireAuth, requireAdminPassword, async (req, res) => {
   if (req.user && req.user.role !== 'admin' && req.user.permissions && req.user.permissions.workOrdersDelete === false) {
     return res.status(403).json({ error: 'Você não possui permissão para excluir Ordens de Serviço.' });
   }
@@ -1708,7 +1722,7 @@ app.delete('/api/work-orders/:id', requireAuth, requireAdminPassword, (req, res)
     return res.status(404).json({ error: 'Ordem de Serviço não encontrada' });
   }
 
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json({ success: true, message: 'Ordem de Serviço removida com sucesso' });
 });
 
@@ -1720,7 +1734,7 @@ app.get('/api/sales', requireAuth, (req, res) => {
   res.json(db.sales || []);
 });
 
-app.post('/api/sales', requireAuth, (req, res) => {
+app.post('/api/sales', requireAuth, async (req, res) => {
   const db = getDatabase();
   const nextNumber = ((db.sales || []).reduce((max, s) => Math.max(max, s.number || 100), 100)) + 1;
 
@@ -1804,13 +1818,13 @@ app.post('/api/sales', requireAuth, (req, res) => {
 
   if (!db.sales) db.sales = [];
   db.sales.unshift(newSale);
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.status(201).json(newSale);
 });
 
 // Atualizar vendedor vinculado a uma venda
-app.put('/api/sales/:id/seller', requireAuth, (req, res) => {
+app.put('/api/sales/:id/seller', requireAuth, async (req, res) => {
   const db = getDatabase();
   const idOrNum = String(req.params.id).trim().toLowerCase();
   const index = (db.sales || []).findIndex(s =>
@@ -1825,12 +1839,12 @@ app.put('/api/sales/:id/seller', requireAuth, (req, res) => {
     sellerId,
     sellerName
   };
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(db.sales[index]);
 });
 
 // Cancelamento de Venda com estorno automático de estoque
-app.post('/api/sales/:id/cancel', requireAuth, requireAdminPassword, (req, res) => {
+app.post('/api/sales/:id/cancel', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   const idOrNum = String(req.params.id).trim().toLowerCase();
   const sale = (db.sales || []).find(s => 
@@ -1857,13 +1871,13 @@ app.post('/api/sales/:id/cancel', requireAuth, requireAdminPassword, (req, res) 
 
   sale.status = 'cancelada';
   sale.cancelledAt = new Date().toISOString();
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.json({ success: true, message: 'Venda cancelada e estoque estornado com sucesso', sale });
 });
 
 // Exclusão definitiva de venda
-app.delete('/api/sales/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/sales/:id', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   const idOrNum = String(req.params.id).trim().toLowerCase();
   const saleIndex = (db.sales || []).findIndex(s => 
@@ -1888,7 +1902,7 @@ app.delete('/api/sales/:id', requireAuth, requireAdminPassword, (req, res) => {
   }
 
   db.sales.splice(saleIndex, 1);
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.json({ success: true, message: 'Venda removida com sucesso' });
 });
@@ -1901,7 +1915,7 @@ app.get('/api/quotes', requireAuth, (req, res) => {
   res.json(db.quotes || []);
 });
 
-app.post('/api/quotes', requireAuth, (req, res) => {
+app.post('/api/quotes', requireAuth, async (req, res) => {
   const db = getDatabase();
   const nextNumber = ((db.quotes || []).reduce((max, q) => Math.max(max, q.number || 500), 500)) + 1;
   const validDays = Number(req.body.validDays || 10);
@@ -1933,12 +1947,12 @@ app.post('/api/quotes', requireAuth, (req, res) => {
 
   if (!db.quotes) db.quotes = [];
   db.quotes.unshift(newQuote);
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.status(201).json(newQuote);
 });
 
-app.put('/api/quotes/:id', requireAuth, (req, res) => {
+app.put('/api/quotes/:id', requireAuth, async (req, res) => {
   const db = getDatabase();
   const index = (db.quotes || []).findIndex(q => q.id === req.params.id);
   if (index === -1) {
@@ -1955,23 +1969,23 @@ app.put('/api/quotes/:id', requireAuth, (req, res) => {
     notes: body.notes !== undefined ? toUpper(body.notes) : db.quotes[index].notes
   };
   db.quotes[index] = updated;
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(updated);
 });
 
-app.delete('/api/quotes/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/quotes/:id', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   const initialCount = (db.quotes || []).length;
   db.quotes = (db.quotes || []).filter(q => q.id !== req.params.id);
   if (db.quotes.length === initialCount) {
     return res.status(404).json({ error: 'Orçamento não encontrado' });
   }
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json({ success: true, message: 'Orçamento removido com sucesso' });
 });
 
 // Converter Orçamento em Ordem de Serviço em 1 clique
-app.post('/api/quotes/:id/convert-to-os', requireAuth, (req, res) => {
+app.post('/api/quotes/:id/convert-to-os', requireAuth, async (req, res) => {
   const db = getDatabase();
   const quote = (db.quotes || []).find(q => q.id === req.params.id);
   if (!quote) {
@@ -2038,7 +2052,7 @@ app.post('/api/quotes/:id/convert-to-os', requireAuth, (req, res) => {
 
   if (!db.workOrders) db.workOrders = [];
   db.workOrders.unshift(newOS);
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.status(201).json({ message: 'Orçamento convertido em OS com sucesso!', workOrder: newOS });
 });
@@ -2051,7 +2065,7 @@ app.get('/api/products', requireAuth, (req, res) => {
   res.json(db.products || []);
 });
 
-app.post('/api/products', requireAuth, (req, res) => {
+app.post('/api/products', requireAuth, async (req, res) => {
   const db = getDatabase();
   const newProduct = {
     id: `prod-${Date.now()}`,
@@ -2073,12 +2087,12 @@ app.post('/api/products', requireAuth, (req, res) => {
 
   if (!db.products) db.products = [];
   db.products.push(newProduct);
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.status(201).json(newProduct);
 });
 
-app.put('/api/products/:id', requireAuth, (req, res) => {
+app.put('/api/products/:id', requireAuth, async (req, res) => {
   const db = getDatabase();
   const index = (db.products || []).findIndex(p => p.id === req.params.id);
   if (index === -1) {
@@ -2106,14 +2120,14 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
   };
 
   db.products[index] = updated;
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(updated);
 });
 
-app.delete('/api/products/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/products/:id', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   db.products = (db.products || []).filter(p => p.id !== req.params.id);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json({ success: true });
 });
 
@@ -2125,7 +2139,7 @@ app.get('/api/services', requireAuth, (req, res) => {
   res.json(db.services || []);
 });
 
-app.post('/api/services', requireAuth, (req, res) => {
+app.post('/api/services', requireAuth, async (req, res) => {
   const db = getDatabase();
   const newService = {
     id: `serv-${Date.now()}`,
@@ -2146,12 +2160,12 @@ app.post('/api/services', requireAuth, (req, res) => {
 
   if (!db.services) db.services = [];
   db.services.push(newService);
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.status(201).json(newService);
 });
 
-app.put('/api/services/:id', requireAuth, (req, res) => {
+app.put('/api/services/:id', requireAuth, async (req, res) => {
   const db = getDatabase();
   const index = (db.services || []).findIndex(s => s.id === req.params.id);
   if (index === -1) {
@@ -2176,14 +2190,14 @@ app.put('/api/services/:id', requireAuth, (req, res) => {
   };
 
   db.services[index] = updated;
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(updated);
 });
 
-app.delete('/api/services/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/services/:id', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   db.services = (db.services || []).filter(s => s.id !== req.params.id);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json({ success: true });
 });
 
@@ -2195,7 +2209,7 @@ app.get('/api/customers', requireAuth, (req, res) => {
   res.json(db.customers || []);
 });
 
-app.post('/api/customers', requireAuth, (req, res) => {
+app.post('/api/customers', requireAuth, async (req, res) => {
   const db = getDatabase();
   const newCust = {
     id: `cust-${Date.now()}`,
@@ -2226,12 +2240,12 @@ app.post('/api/customers', requireAuth, (req, res) => {
 
   if (!db.customers) db.customers = [];
   db.customers.push(newCust);
-  saveDatabase(db);
+  await saveDatabase(db);
 
   res.status(201).json(newCust);
 });
 
-app.put('/api/customers/:id', requireAuth, (req, res) => {
+app.put('/api/customers/:id', requireAuth, async (req, res) => {
   const db = getDatabase();
   const index = (db.customers || []).findIndex(c => c.id === req.params.id);
   if (index === -1) {
@@ -2267,14 +2281,14 @@ app.put('/api/customers/:id', requireAuth, (req, res) => {
   };
 
   db.customers[index] = updated;
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(updated);
 });
 
-app.delete('/api/customers/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/customers/:id', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   db.customers = (db.customers || []).filter(c => c.id !== req.params.id);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json({ success: true });
 });
 
@@ -2498,13 +2512,13 @@ app.get('/api/fiscal/config', requireAuth, (req, res) => {
   res.json(db.fiscalConfig || {});
 });
 
-app.put('/api/fiscal/config', requireAuth, (req, res) => {
+app.put('/api/fiscal/config', requireAuth, async (req, res) => {
   const db = getDatabase();
   db.fiscalConfig = {
     ...db.fiscalConfig,
     ...req.body
   };
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(db.fiscalConfig);
 });
 
@@ -2533,13 +2547,13 @@ app.post('/api/backup/run', requireAuth, (req, res) => {
   }
 });
 
-app.put('/api/backup/settings', requireAuth, (req, res) => {
+app.put('/api/backup/settings', requireAuth, async (req, res) => {
   const db = getDatabase();
   db.backupSettings = {
     ...db.backupSettings,
     ...req.body
   };
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(db.backupSettings);
 });
 
@@ -2565,7 +2579,7 @@ app.get('/api/sellers', requireAuth, (req, res) => {
   res.json(db.sellers || []);
 });
 
-app.post('/api/sellers', requireAuth, (req, res) => {
+app.post('/api/sellers', requireAuth, async (req, res) => {
   const db = getDatabase();
   const { name, nickname, document, phone, email, commissionRate, active, notes } = req.body || {};
   const cleanName = toUpper(name);
@@ -2593,11 +2607,11 @@ app.post('/api/sellers', requireAuth, (req, res) => {
   };
 
   db.sellers.push(newSeller);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.status(201).json(newSeller);
 });
 
-app.put('/api/sellers/:id', requireAuth, (req, res) => {
+app.put('/api/sellers/:id', requireAuth, async (req, res) => {
   const db = getDatabase();
   if (!db.sellers) db.sellers = [];
   const index = db.sellers.findIndex(s => s.id === req.params.id);
@@ -2645,15 +2659,15 @@ app.put('/api/sellers/:id', requireAuth, (req, res) => {
     });
   }
 
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(updated);
 });
 
-app.delete('/api/sellers/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/sellers/:id', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   if (!db.sellers) db.sellers = [];
   db.sellers = db.sellers.filter(s => s.id !== req.params.id);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json({ success: true });
 });
 
@@ -2671,7 +2685,7 @@ app.get('/api/expenses', requireAuth, (req, res) => {
   res.json(sorted);
 });
 
-app.post('/api/expenses', requireAuth, (req, res) => {
+app.post('/api/expenses', requireAuth, async (req, res) => {
   const db = getDatabase();
   const { description, amount, category, date, sellerId, sellerName, paymentMethod, notes, receiptUrl } = req.body || {};
   const cleanDesc = toUpper(description);
@@ -2709,11 +2723,11 @@ app.post('/api/expenses', requireAuth, (req, res) => {
   };
 
   db.expenses.unshift(newExpense);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.status(201).json(newExpense);
 });
 
-app.put('/api/expenses/:id', requireAuth, (req, res) => {
+app.put('/api/expenses/:id', requireAuth, async (req, res) => {
   const db = getDatabase();
   if (!db.expenses) db.expenses = [];
   const index = db.expenses.findIndex(e => e.id === req.params.id);
@@ -2757,15 +2771,15 @@ app.put('/api/expenses/:id', requireAuth, (req, res) => {
   };
 
   db.expenses[index] = updated;
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(updated);
 });
 
-app.delete('/api/expenses/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/expenses/:id', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   if (!db.expenses) db.expenses = [];
   db.expenses = db.expenses.filter(e => e.id !== req.params.id);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json({ success: true });
 });
 
@@ -2781,7 +2795,7 @@ app.get('/api/companies', requireAuth, (req, res) => {
   res.json(sorted);
 });
 
-app.post('/api/companies', requireAuth, (req, res) => {
+app.post('/api/companies', requireAuth, async (req, res) => {
   const db = getDatabase();
   const body = req.body || {};
   const corporateName = toUpper(body.corporateName);
@@ -2823,11 +2837,11 @@ app.post('/api/companies', requireAuth, (req, res) => {
   };
 
   db.companies.push(newCompany);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.status(201).json(newCompany);
 });
 
-app.put('/api/companies/:id', requireAuth, (req, res) => {
+app.put('/api/companies/:id', requireAuth, async (req, res) => {
   const db = getDatabase();
   if (!db.companies) db.companies = [];
   const index = db.companies.findIndex(c => c.id === req.params.id);
@@ -2884,15 +2898,15 @@ app.put('/api/companies/:id', requireAuth, (req, res) => {
     });
   }
 
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(updated);
 });
 
-app.delete('/api/companies/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/companies/:id', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   if (!db.companies) db.companies = [];
   db.companies = db.companies.filter(c => c.id !== req.params.id);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json({ success: true });
 });
 
@@ -2903,7 +2917,7 @@ app.get('/api/company-plans', requireAuth, (req, res) => {
   res.json(list);
 });
 
-app.post('/api/company-plans', requireAuth, (req, res) => {
+app.post('/api/company-plans', requireAuth, async (req, res) => {
   const db = getDatabase();
   const body = req.body || {};
   const name = toUpper(body.name);
@@ -2931,11 +2945,11 @@ app.post('/api/company-plans', requireAuth, (req, res) => {
   };
 
   db.companyPlans.push(newPlan);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.status(201).json(newPlan);
 });
 
-app.put('/api/company-plans/:id', requireAuth, (req, res) => {
+app.put('/api/company-plans/:id', requireAuth, async (req, res) => {
   const db = getDatabase();
   if (!db.companyPlans) db.companyPlans = [];
   const index = db.companyPlans.findIndex(p => p.id === req.params.id);
@@ -2964,15 +2978,15 @@ app.put('/api/company-plans/:id', requireAuth, (req, res) => {
   };
 
   db.companyPlans[index] = updated;
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(updated);
 });
 
-app.delete('/api/company-plans/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/company-plans/:id', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   if (!db.companyPlans) db.companyPlans = [];
   db.companyPlans = db.companyPlans.filter(p => p.id !== req.params.id);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json({ success: true });
 });
 
@@ -2987,7 +3001,7 @@ app.get('/api/company-equipments', requireAuth, (req, res) => {
   res.json(sorted);
 });
 
-app.post('/api/company-equipments', requireAuth, (req, res) => {
+app.post('/api/company-equipments', requireAuth, async (req, res) => {
   const db = getDatabase();
   const body = req.body || {};
   const patrimonio = toUpper(body.patrimonio);
@@ -3025,11 +3039,11 @@ app.post('/api/company-equipments', requireAuth, (req, res) => {
   };
 
   db.companyEquipments.push(newEquip);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.status(201).json(newEquip);
 });
 
-app.put('/api/company-equipments/:id', requireAuth, (req, res) => {
+app.put('/api/company-equipments/:id', requireAuth, async (req, res) => {
   const db = getDatabase();
   if (!db.companyEquipments) db.companyEquipments = [];
   const index = db.companyEquipments.findIndex(e => e.id === req.params.id);
@@ -3064,15 +3078,15 @@ app.put('/api/company-equipments/:id', requireAuth, (req, res) => {
   };
 
   db.companyEquipments[index] = updated;
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(updated);
 });
 
-app.delete('/api/company-equipments/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/company-equipments/:id', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   if (!db.companyEquipments) db.companyEquipments = [];
   db.companyEquipments = db.companyEquipments.filter(e => e.id !== req.params.id);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json({ success: true });
 });
 
@@ -3094,7 +3108,7 @@ app.get('/api/company-maintenances', requireAuth, (req, res) => {
   res.json(sorted);
 });
 
-app.post('/api/company-maintenances', requireAuth, (req, res) => {
+app.post('/api/company-maintenances', requireAuth, async (req, res) => {
   const db = getDatabase();
   const body = req.body || {};
   if (!body.equipmentId) {
@@ -3154,11 +3168,11 @@ app.post('/api/company-maintenances', requireAuth, (req, res) => {
     }
   }
 
-  saveDatabase(db);
+  await saveDatabase(db);
   res.status(201).json(newMaintenance);
 });
 
-app.put('/api/company-maintenances/:id', requireAuth, (req, res) => {
+app.put('/api/company-maintenances/:id', requireAuth, async (req, res) => {
   const db = getDatabase();
   if (!db.companyMaintenances) db.companyMaintenances = [];
   const index = db.companyMaintenances.findIndex(m => m.id === req.params.id);
@@ -3210,15 +3224,15 @@ app.put('/api/company-maintenances/:id', requireAuth, (req, res) => {
     }
   }
 
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(updated);
 });
 
-app.delete('/api/company-maintenances/:id', requireAuth, requireAdminPassword, (req, res) => {
+app.delete('/api/company-maintenances/:id', requireAuth, requireAdminPassword, async (req, res) => {
   const db = getDatabase();
   if (!db.companyMaintenances) db.companyMaintenances = [];
   db.companyMaintenances = db.companyMaintenances.filter(m => m.id !== req.params.id);
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json({ success: true });
 });
 
@@ -3240,13 +3254,13 @@ app.get('/api/settings', requireAuth, (req, res) => {
   });
 });
 
-app.put('/api/settings', requireAuth, (req, res) => {
+app.put('/api/settings', requireAuth, async (req, res) => {
   const db = getDatabase();
   db.storeSettings = {
     ...db.storeSettings,
     ...req.body
   };
-  saveDatabase(db);
+  await saveDatabase(db);
   res.json(db.storeSettings);
 });
 
@@ -3357,6 +3371,25 @@ app.post('/api/documents/save-report', requireAuth, (req, res) => {
     console.error('Erro ao salvar relatório no diretório de documentos:', err);
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// Middleware de tratamento global de erros para a API
+app.use((err, req, res, next) => {
+  if (err && err.message && (err.message.includes('CONFLITO_CONCORRENCIA') || err.code === 'OCC_CONFLICT')) {
+    return res.status(409).json({
+      success: false,
+      error: 'Conflito de concorrência: os dados foram alterados por outra requisição simultânea. Recarregue a página para obter a versão mais recente.',
+      code: 'OCC_CONFLICT'
+    });
+  }
+  if (res.headersSent) {
+    return next(err);
+  }
+  console.error('[API Error Intercepted]', err.message || err);
+  res.status(500).json({
+    success: false,
+    error: err && err.message ? err.message : 'Erro interno do servidor.'
+  });
 });
 
 // Servir arquivos estáticos do frontend compilado

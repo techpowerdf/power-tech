@@ -1,7 +1,6 @@
 /**
  * Supabase & PostgreSQL Cloud Integration Service
- * Suporta conexão via PostgreSQL Pool (POSTGRES_URL / DATABASE_URL)
- * e via cliente REST (@supabase/supabase-js com SUPABASE_URL e chaves).
+ * Configurado especificamente para Serverless (Vercel) e Transaction Pooler do Supabase.
  */
 
 const { Pool } = require('pg');
@@ -9,37 +8,45 @@ const { createClient } = require('@supabase/supabase-js');
 
 let pgPool = null;
 let supabaseClient = null;
-let isInitialized = false;
 
-// Obtém URL do Postgres provida pelo Vercel + Supabase
-const postgresUrl = 
-  process.env.POSTGRES_URL || 
-  process.env.POSTGRES_PRISMA_URL || 
-  process.env.DATABASE_URL || 
-  process.env.SUPABASE_DB_URL || 
-  null;
+function getPostgresUrl() {
+  return (
+    process.env.POSTGRES_URL ||
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.SUPABASE_DB_URL ||
+    null
+  );
+}
 
-// Obtém credenciais da API Supabase
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || null;
-const supabaseKey = 
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 
-  process.env.SUPABASE_ANON_KEY || 
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-  process.env.VITE_SUPABASE_ANON_KEY || 
-  null;
+function getSupabaseUrl() {
+  return (
+    process.env.SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    null
+  );
+}
+
+function getSupabaseKey() {
+  // Aceita exclusivamente a chave administrativa de serviço (SUPABASE_SERVICE_ROLE_KEY).
+  // NUNCA aceita chaves públicas ou anônimas (SUPABASE_ANON_KEY).
+  return process.env.SUPABASE_SERVICE_ROLE_KEY || null;
+}
 
 function isSupabaseConfigured() {
-  return Boolean(postgresUrl || (supabaseUrl && supabaseKey));
+  return Boolean(getPostgresUrl() || (getSupabaseUrl() && getSupabaseKey()));
 }
 
 function getPgPool() {
-  if (!pgPool && postgresUrl) {
+  const url = getPostgresUrl();
+  if (!pgPool && url) {
     pgPool = new Pool({
-      connectionString: postgresUrl,
-      ssl: postgresUrl.includes('localhost') ? false : { rejectUnauthorized: false },
-      connectionTimeoutMillis: 5000,
-      idleTimeoutMillis: 30000,
-      max: 10
+      connectionString: url,
+      ssl: url.includes('localhost') ? false : { rejectUnauthorized: false },
+      connectionTimeoutMillis: 10000, // 10 segundos para handshake seguro em cold start
+      idleTimeoutMillis: 10000,
+      max: 1 // Apenas 1 conexão por contêiner serverless para o Transaction Pooler
     });
 
     pgPool.on('error', (err) => {
@@ -50,8 +57,10 @@ function getPgPool() {
 }
 
 function getSupabaseClient() {
-  if (!supabaseClient && supabaseUrl && supabaseKey) {
-    supabaseClient = createClient(supabaseUrl, supabaseKey, {
+  const url = getSupabaseUrl();
+  const key = getSupabaseKey();
+  if (!supabaseClient && url && key) {
+    supabaseClient = createClient(url, key, {
       auth: { persistSession: false }
     });
   }
@@ -59,7 +68,45 @@ function getSupabaseClient() {
 }
 
 /**
- * Inicializa a tabela no Supabase/PostgreSQL caso ainda não exista
+ * Obtém a versão numérica atual do registro 'main_database' no Supabase
+ * Utilizado para validação de concorrência ultra-rápida (~2ms)
+ */
+async function getCloudVersion() {
+  const pool = getPgPool();
+  if (pool) {
+    try {
+      const res = await pool.query('SELECT COALESCE(version, 1) as version FROM system_store WHERE key = $1', ['main_database']);
+      if (res.rows && res.rows.length > 0) {
+        return Number(res.rows[0].version || 1);
+      }
+      return null;
+    } catch (err) {
+      if (err.message && err.message.includes('version')) {
+        return 1;
+      }
+      throw err;
+    }
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('system_store')
+        .select('version')
+        .eq('key', 'main_database')
+        .maybeSingle();
+      if (!error && data) {
+        return Number(data.version || 1);
+      }
+    } catch (e) {}
+  }
+
+  return null;
+}
+
+/**
+ * Inicializa e carrega os dados e a versão do Supabase/PostgreSQL
  */
 async function initSupabase(fallbackData) {
   if (!isSupabaseConfigured()) {
@@ -69,74 +116,119 @@ async function initSupabase(fallbackData) {
   const pool = getPgPool();
   if (pool) {
     try {
-      console.log('[Supabase] Conectando ao PostgreSQL na nuvem...');
-      const client = await pool.connect();
+      console.log('[Supabase] Conectando ao PostgreSQL via Transaction Pooler...');
+      let res;
       try {
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS system_store (
-            key text PRIMARY KEY,
-            data jsonb NOT NULL,
-            updated_at timestamptz DEFAULT now()
-          );
-        `);
-        console.log('[Supabase] Tabela "system_store" verificada com sucesso.');
+        res = await pool.query(
+          'SELECT data, COALESCE(version, 1) as version FROM system_store WHERE key = $1',
+          ['main_database']
+        );
+      } catch (queryErr) {
+        if (queryErr.message && queryErr.message.includes('version')) {
+          res = await pool.query('SELECT data FROM system_store WHERE key = $1', ['main_database']);
+          if (res.rows && res.rows.length > 0) {
+            res.rows[0].version = 1;
+          }
+        } else {
+          throw queryErr;
+        }
+      }
 
-        // Verifica se os dados principais já existem
-        const res = await client.query('SELECT data FROM system_store WHERE key = $1', ['main_database']);
-        if (res.rows && res.rows.length > 0 && res.rows[0].data) {
-          console.log('[Supabase] Dados principais carregados do banco em nuvem.');
-          isInitialized = true;
-          return res.rows[0].data;
-        } else if (fallbackData) {
-          console.log('[Supabase] Populando banco em nuvem com os dados iniciais...');
-          await client.query(
-            'INSERT INTO system_store (key, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = now()',
+      if (res.rows && res.rows.length > 0 && res.rows[0].data) {
+        console.log('[Supabase] Dados existentes carregados com sucesso do PostgreSQL.');
+        return {
+          data: res.rows[0].data,
+          version: Number(res.rows[0].version || 1)
+        };
+      }
+
+      // Se a tabela estiver vazia e fallbackData for fornecido, grava registro inicial
+      if (fallbackData) {
+        console.log('[Supabase] Registro "main_database" não encontrado. Inicializando...');
+        try {
+          await pool.query(
+            'INSERT INTO system_store (key, data, version, updated_at) VALUES ($1, $2, 1, now()) ON CONFLICT (key) DO UPDATE SET data = $2, version = 1, updated_at = now()',
             ['main_database', JSON.stringify(fallbackData)]
           );
-          isInitialized = true;
-          return fallbackData;
+        } catch (insertErr) {
+          if (insertErr.message && insertErr.message.includes('version')) {
+            await pool.query(
+              'INSERT INTO system_store (key, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = now()',
+              ['main_database', JSON.stringify(fallbackData)]
+            );
+          } else {
+            throw insertErr;
+          }
         }
-      } finally {
-        client.release();
+        return { data: fallbackData, version: 1 };
       }
     } catch (err) {
-      console.error('[Supabase] Erro ao conectar via PostgreSQL Pool:', err.message);
+      console.error('[Supabase] Falha ao consultar PostgreSQL Pool:', err.message);
+      // Se a tabela não existir, cria e popula
+      if (err.message && err.message.includes('does not exist')) {
+        try {
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS system_store (
+              key text PRIMARY KEY,
+              data jsonb NOT NULL,
+              version bigint NOT NULL DEFAULT 1,
+              updated_at timestamptz DEFAULT now()
+            );
+          `);
+          if (fallbackData) {
+            await pool.query(
+              'INSERT INTO system_store (key, data, version, updated_at) VALUES ($1, $2, 1, now()) ON CONFLICT (key) DO UPDATE SET data = $2, version = 1, updated_at = now()',
+              ['main_database', JSON.stringify(fallbackData)]
+            );
+            return { data: fallbackData, version: 1 };
+          }
+        } catch (createErr) {
+          console.error('[Supabase] Falha ao auto-criar tabela:', createErr.message);
+        }
+      }
+      throw err;
     }
   }
 
+  // Fallback REST exclusivo com SUPABASE_SERVICE_ROLE_KEY
   const client = getSupabaseClient();
   if (client) {
     try {
-      console.log('[Supabase] Conectando via REST Client (@supabase/supabase-js)...');
+      console.log('[Supabase] Tentando carregar dados via API REST Supabase (Service Role)...');
       const { data, error } = await client
         .from('system_store')
-        .select('data')
+        .select('data, version')
         .eq('key', 'main_database')
         .maybeSingle();
 
       if (!error && data && data.data) {
-        console.log('[Supabase] Dados principais obtidos com sucesso via REST.');
-        isInitialized = true;
-        return data.data;
-      } else if (fallbackData) {
-        console.log('[Supabase] Tentando inicializar dados via REST...');
+        console.log('[Supabase] Dados carregados com sucesso via API REST.');
+        return {
+          data: data.data,
+          version: Number(data.version || 1)
+        };
+      }
+
+      if (fallbackData) {
+        console.log('[Supabase] Gravando dados iniciais via API REST...');
         const { error: upsertErr } = await client
           .from('system_store')
           .upsert({
             key: 'main_database',
             data: fallbackData,
+            version: 1,
             updated_at: new Date().toISOString()
           });
         if (!upsertErr) {
-          console.log('[Supabase] Dados iniciais gravados via REST com sucesso.');
-          isInitialized = true;
-          return fallbackData;
+          console.log('[Supabase] Dados iniciais persistidos via API REST.');
+          return { data: fallbackData, version: 1 };
         } else {
-          console.warn('[Supabase] Aviso ao gravar via REST (verifique se a tabela system_store foi criada):', upsertErr.message);
+          console.error('[Supabase] Erro ao gravar via API REST:', upsertErr.message);
         }
       }
     } catch (err) {
-      console.error('[Supabase] Erro ao conectar via REST Client:', err.message);
+      console.error('[Supabase] Erro ao conectar via API REST:', err.message);
+      throw err;
     }
   }
 
@@ -144,48 +236,107 @@ async function initSupabase(fallbackData) {
 }
 
 /**
- * Salva os dados no Supabase / PostgreSQL em nuvem
+ * Salva os dados no Supabase / PostgreSQL com controle de concorrência otimista (OCC)
  */
-async function saveToSupabase(data) {
-  if (!isSupabaseConfigured() || !data) return false;
+async function saveToSupabase(data, expectedVersion = 1) {
+  if (!isSupabaseConfigured() || !data) {
+    return false;
+  }
 
+  let lastError = null;
+  const currentExp = Number(expectedVersion) || 1;
+  const targetVersion = currentExp + 1;
+
+  // 1. PostgreSQL Pool
   const pool = getPgPool();
   if (pool) {
     try {
-      await pool.query(
-        'INSERT INTO system_store (key, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = now()',
-        ['main_database', JSON.stringify(data)]
-      );
-      return true;
+      let res;
+      try {
+        res = await pool.query(
+          'UPDATE system_store SET data = $2, version = $3, updated_at = now() WHERE key = $1 AND (version = $4 OR version IS NULL) RETURNING version',
+          ['main_database', JSON.stringify(data), targetVersion, currentExp]
+        );
+      } catch (updateErr) {
+        if (updateErr.message && updateErr.message.includes('version')) {
+          res = await pool.query(
+            'INSERT INTO system_store (key, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = now() RETURNING 1 as version',
+            ['main_database', JSON.stringify(data)]
+          );
+          return { success: true, version: targetVersion };
+        }
+        throw updateErr;
+      }
+
+      if (res.rowCount === 0) {
+        // Verifica se o registro sequer existe
+        const check = await pool.query('SELECT version FROM system_store WHERE key = $1', ['main_database']);
+        if (check.rows.length === 0) {
+          await pool.query(
+            'INSERT INTO system_store (key, data, version, updated_at) VALUES ($1, $2, 1, now())',
+            ['main_database', JSON.stringify(data)]
+          );
+          return { success: true, version: 1 };
+        }
+
+        // Se a linha existe com versão diferente: CONFLITO DE CONCORRÊNCIA!
+        const actualVersion = check.rows[0].version;
+        const conflictErr = new Error(
+          `CONFLITO_CONCORRENCIA: Os dados foram alterados por outra requisição simultânea (versão esperada: ${currentExp}, versão atual no banco: ${actualVersion}).`
+        );
+        conflictErr.code = 'OCC_CONFLICT';
+        conflictErr.currentDbVersion = Number(actualVersion);
+        throw conflictErr;
+      }
+
+      return { success: true, version: targetVersion };
     } catch (err) {
+      lastError = err;
+      if (err.code === 'OCC_CONFLICT') {
+        throw err; // NUNCA tenta fallback cego em caso de conflito de concorrência
+      }
       console.error('[Supabase] Falha ao salvar no PostgreSQL:', err.message);
     }
   }
 
+  // 2. Fallback REST exclusivo com SUPABASE_SERVICE_ROLE_KEY
   const client = getSupabaseClient();
   if (client) {
     try {
-      const { error } = await client
+      const { data: upsertData, error } = await client
         .from('system_store')
         .upsert({
           key: 'main_database',
           data,
+          version: targetVersion,
           updated_at: new Date().toISOString()
-        });
-      if (!error) return true;
+        })
+        .select('version')
+        .single();
+
+      if (!error) {
+        console.log('[Supabase] Gravação concluída com sucesso via API REST (fallback).');
+        return {
+          success: true,
+          version: upsertData && upsertData.version ? Number(upsertData.version) : targetVersion
+        };
+      }
+      lastError = new Error(error.message);
       console.error('[Supabase] Falha ao salvar via REST:', error.message);
     } catch (err) {
+      lastError = err;
       console.error('[Supabase] Erro na requisição REST de salvamento:', err.message);
     }
   }
 
-  return false;
+  throw new Error(`Falha na persistência no banco Supabase: ${lastError ? lastError.message : 'Sem conexão configurada'}`);
 }
 
 module.exports = {
   isSupabaseConfigured,
   initSupabase,
   saveToSupabase,
+  getCloudVersion,
   getPgPool,
   getSupabaseClient
 };

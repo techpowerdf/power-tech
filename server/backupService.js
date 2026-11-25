@@ -106,7 +106,7 @@ function executeBackup(type = 'manual', customDestination = null) {
 // Limpa backups com mais de X dias
 function cleanupOldBackups(dirPath, retainDays = 30) {
   try {
-    if (!fs.existsSync(dirPath)) return;
+    if (!dirPath || typeof dirPath !== 'string' || !fs.existsSync(dirPath)) return;
     const files = fs.readdirSync(dirPath);
     const now = Date.now();
     const maxAgeMs = retainDays * 24 * 60 * 60 * 1000;
@@ -194,7 +194,7 @@ function restoreBackup(backupFilePath) {
 // Lista os arquivos físicos presentes na pasta de backup
 function listPhysicalBackups(directoryPath) {
   try {
-    if (!fs.existsSync(directoryPath)) return [];
+    if (!directoryPath || typeof directoryPath !== 'string' || !fs.existsSync(directoryPath)) return [];
     const files = fs.readdirSync(directoryPath);
     return files
       .filter(f => (f.startsWith('Backup_PowerTech_') || f.startsWith('Backup_InfoTech_')) && f.endsWith('.json'))

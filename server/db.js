@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { isSupabaseConfigured, initSupabase, saveToSupabase } = require('./supabaseService');
+const { isSupabaseConfigured, initSupabase, saveToSupabase, getCloudVersion } = require('./supabaseService');
 
 const DATA_DIR = process.env.VERCEL
   ? path.join('/tmp', 'powertech_data')
@@ -397,37 +397,13 @@ try {
   // Ignora se não puder criar de início
 }
 
-// In-memory cache e sincronização com Supabase
+// In-memory cache e controle de sincronização com Supabase
 let inMemoryDb = null;
-let supabaseSyncPromise = null;
+let currentDbVersion = 1;
+let isLoadedFromCloud = false;
+let writeQueue = Promise.resolve();
 
-function triggerSupabaseSync() {
-  if (isSupabaseConfigured() && !supabaseSyncPromise) {
-    supabaseSyncPromise = initSupabase(inMemoryDb || INITIAL_DATA)
-      .then((cloudData) => {
-        if (cloudData) {
-          inMemoryDb = cloudData;
-          try {
-            const tempFile = `${DB_FILE}.tmp.${Date.now()}`;
-            fs.writeFileSync(tempFile, JSON.stringify(cloudData, null, 2), 'utf-8');
-            fs.renameSync(tempFile, DB_FILE);
-            console.log('[Supabase Sync] Cache local atualizado com dados da nuvem.');
-          } catch (e) {}
-        }
-      })
-      .catch((err) => {
-        console.error('[Supabase Sync Error]', err.message);
-      });
-  }
-}
-
-// Atomic load & save
-function getDatabase() {
-  if (inMemoryDb) {
-    triggerSupabaseSync();
-    return inMemoryDb;
-  }
-
+function loadLocalDatabase() {
   try {
     if (!fs.existsSync(DB_FILE)) {
       let baseData = INITIAL_DATA;
@@ -442,9 +418,6 @@ function getDatabase() {
           baseData = INITIAL_DATA;
         }
       }
-      inMemoryDb = baseData;
-      saveDatabase(baseData);
-      triggerSupabaseSync();
       return JSON.parse(JSON.stringify(baseData));
     }
     const content = fs.readFileSync(DB_FILE, 'utf-8');
@@ -505,42 +478,113 @@ function getDatabase() {
     }
     if (!data.companyEquipments) data.companyEquipments = [];
     if (!data.companyMaintenances) data.companyMaintenances = [];
-    inMemoryDb = data;
-    triggerSupabaseSync();
-    return inMemoryDb;
+    return data;
   } catch (error) {
     console.error('Erro ao ler banco de dados local:', error);
-    inMemoryDb = JSON.parse(JSON.stringify(INITIAL_DATA));
-    triggerSupabaseSync();
-    return inMemoryDb;
+    return JSON.parse(JSON.stringify(INITIAL_DATA));
   }
 }
 
-function saveDatabase(data) {
-  try {
-    inMemoryDb = data;
-    const tempFile = `${DB_FILE}.tmp.${Date.now()}`;
-    fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf-8');
-    fs.renameSync(tempFile, DB_FILE);
+/**
+ * Garante que o banco de dados seja carregado do Supabase
+ * antes de qualquer rota processar a requisição.
+ * Se o Supabase estiver configurado e falhar, bloqueia a operação para evitar uso de cópia desatualizada.
+ */
+async function ensureDatabaseLoaded() {
+  if (isSupabaseConfigured()) {
+    try {
+      // 1. Se já carregou na memória deste contêiner, verifica se a versão na nuvem mudou
+      if (isLoadedFromCloud && inMemoryDb) {
+        const cloudVersion = await getCloudVersion();
+        if (cloudVersion !== null && cloudVersion === currentDbVersion) {
+          return inMemoryDb;
+        }
+      }
 
-    // Se o Supabase estiver configurado, sincroniza na nuvem em segundo plano
-    if (isSupabaseConfigured()) {
-      saveToSupabase(data).catch((err) => {
-        console.error('[Supabase Save Error]', err.message);
-      });
+      // 2. Primeira carga ou versão mais recente detectada no Supabase
+      const fallback = inMemoryDb || loadLocalDatabase();
+      const cloudResult = await initSupabase(fallback);
+      if (cloudResult && cloudResult.data) {
+        inMemoryDb = cloudResult.data;
+        currentDbVersion = Number(cloudResult.version || 1);
+        isLoadedFromCloud = true;
+        try {
+          const tempFile = `${DB_FILE}.tmp.${Date.now()}`;
+          fs.writeFileSync(tempFile, JSON.stringify(inMemoryDb, null, 2), 'utf-8');
+          fs.renameSync(tempFile, DB_FILE);
+          console.log(`[Supabase Sync] Banco carregado da nuvem com sucesso (Versão ${currentDbVersion}).`);
+        } catch (e) {}
+        return inMemoryDb;
+      }
+
+      throw new Error('Falha ao obter os dados atualizados do banco Supabase.');
+    } catch (err) {
+      console.error('[Supabase Load Error]', err.message);
+      // Em produção (com Supabase configurado), NUNCA usar cópia local desatualizada silenciosamente!
+      throw new Error(`Falha de conexão com o banco de dados remoto: ${err.message}. Operação bloqueada para proteção dos dados.`);
     }
-
-    return true;
-  } catch (error) {
-    console.error('Erro ao salvar banco de dados local:', error);
-    return false;
   }
+
+  // Apenas em desenvolvimento local (sem Supabase configurado)
+  if (!inMemoryDb) {
+    inMemoryDb = loadLocalDatabase();
+    currentDbVersion = 1;
+  }
+  return inMemoryDb;
+}
+
+// Atomic load
+function getDatabase() {
+  if (!inMemoryDb) {
+    inMemoryDb = loadLocalDatabase();
+    currentDbVersion = 1;
+  }
+  return inMemoryDb;
+}
+
+function getCurrentDbVersion() {
+  return currentDbVersion;
+}
+
+// Atomic save assíncrono com mutex de processo e controle de concorrência otimista (OCC)
+async function saveDatabase(data) {
+  return new Promise((resolve, reject) => {
+    writeQueue = writeQueue.then(async () => {
+      try {
+        // Se o Supabase estiver configurado, persiste na nuvem com controle otimista de versão
+        if (isSupabaseConfigured()) {
+          const result = await saveToSupabase(data, currentDbVersion);
+          if (result && result.version) {
+            currentDbVersion = Number(result.version);
+          }
+        } else {
+          currentDbVersion++;
+        }
+
+        inMemoryDb = data;
+
+        // 2. Grava cópia local em disco (para desenvolvimento e backup físico)
+        try {
+          const tempFile = `${DB_FILE}.tmp.${Date.now()}`;
+          fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf-8');
+          fs.renameSync(tempFile, DB_FILE);
+        } catch (error) {
+          console.error('Erro ao salvar cópia local em disco:', error.message);
+        }
+
+        resolve(true);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
 }
 
 module.exports = {
   getDatabase,
   saveDatabase,
-  triggerSupabaseSync,
+  ensureDatabaseLoaded,
+  getCurrentDbVersion,
   DB_FILE,
   DATA_DIR
 };
