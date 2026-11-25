@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { isSupabaseConfigured, initSupabase, saveToSupabase } = require('./supabaseService');
 
 const DATA_DIR = process.env.VERCEL
   ? path.join('/tmp', 'powertech_data')
@@ -396,8 +397,37 @@ try {
   // Ignora se não puder criar de início
 }
 
+// In-memory cache e sincronização com Supabase
+let inMemoryDb = null;
+let supabaseSyncPromise = null;
+
+function triggerSupabaseSync() {
+  if (isSupabaseConfigured() && !supabaseSyncPromise) {
+    supabaseSyncPromise = initSupabase(inMemoryDb || INITIAL_DATA)
+      .then((cloudData) => {
+        if (cloudData) {
+          inMemoryDb = cloudData;
+          try {
+            const tempFile = `${DB_FILE}.tmp.${Date.now()}`;
+            fs.writeFileSync(tempFile, JSON.stringify(cloudData, null, 2), 'utf-8');
+            fs.renameSync(tempFile, DB_FILE);
+            console.log('[Supabase Sync] Cache local atualizado com dados da nuvem.');
+          } catch (e) {}
+        }
+      })
+      .catch((err) => {
+        console.error('[Supabase Sync Error]', err.message);
+      });
+  }
+}
+
 // Atomic load & save
 function getDatabase() {
+  if (inMemoryDb) {
+    triggerSupabaseSync();
+    return inMemoryDb;
+  }
+
   try {
     if (!fs.existsSync(DB_FILE)) {
       let baseData = INITIAL_DATA;
@@ -412,7 +442,9 @@ function getDatabase() {
           baseData = INITIAL_DATA;
         }
       }
+      inMemoryDb = baseData;
       saveDatabase(baseData);
+      triggerSupabaseSync();
       return JSON.parse(JSON.stringify(baseData));
     }
     const content = fs.readFileSync(DB_FILE, 'utf-8');
@@ -473,18 +505,31 @@ function getDatabase() {
     }
     if (!data.companyEquipments) data.companyEquipments = [];
     if (!data.companyMaintenances) data.companyMaintenances = [];
-    return data;
+    inMemoryDb = data;
+    triggerSupabaseSync();
+    return inMemoryDb;
   } catch (error) {
     console.error('Erro ao ler banco de dados local:', error);
-    return JSON.parse(JSON.stringify(INITIAL_DATA));
+    inMemoryDb = JSON.parse(JSON.stringify(INITIAL_DATA));
+    triggerSupabaseSync();
+    return inMemoryDb;
   }
 }
 
 function saveDatabase(data) {
   try {
+    inMemoryDb = data;
     const tempFile = `${DB_FILE}.tmp.${Date.now()}`;
     fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf-8');
     fs.renameSync(tempFile, DB_FILE);
+
+    // Se o Supabase estiver configurado, sincroniza na nuvem em segundo plano
+    if (isSupabaseConfigured()) {
+      saveToSupabase(data).catch((err) => {
+        console.error('[Supabase Save Error]', err.message);
+      });
+    }
+
     return true;
   } catch (error) {
     console.error('Erro ao salvar banco de dados local:', error);
@@ -495,6 +540,7 @@ function saveDatabase(data) {
 module.exports = {
   getDatabase,
   saveDatabase,
+  triggerSupabaseSync,
   DB_FILE,
   DATA_DIR
 };
