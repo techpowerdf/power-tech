@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const DATA_DIR = process.env.VERCEL
+  ? path.join('/tmp', 'powertech_data')
+  : (process.env.DATA_DIR || path.join(__dirname, '..', 'data'));
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 
 const INITIAL_DATA = {
@@ -335,22 +337,83 @@ const INITIAL_DATA = {
   sales: [],
   quotes: [],
   fiscalInvoices: [],
-  users: [],
+  users: [
+    {
+      id: "usr-admin-default-admin",
+      username: "admin",
+      name: "Administrador Power Tech",
+      role: "admin",
+      permissions: {
+        dashboard: true,
+        workOrders: true,
+        workOrdersDelete: true,
+        pos: true,
+        quotes: true,
+        inventory: true,
+        services: true,
+        customers: true,
+        fiscal: true,
+        backup: true,
+        settings: true
+      },
+      active: true,
+      passwordHash: "987074b834ccf519e53dc6aa9dc37d38:4bbffaa23cf5ad024d3b989793b3a15df68a70847239fc053a084eba0170dd06f514a7eca5dc535456aba2febb7992ad48839855bd84178d8bc7d519d4a6b829",
+      createdAt: "2026-11-25T12:00:00.000Z"
+    },
+    {
+      id: "usr-admin-powertech",
+      username: "Powertech",
+      name: "Power Tech Suporte",
+      role: "admin",
+      permissions: {
+        dashboard: true,
+        workOrders: true,
+        workOrdersDelete: true,
+        pos: true,
+        quotes: true,
+        inventory: true,
+        services: true,
+        customers: true,
+        fiscal: true,
+        backup: true,
+        settings: true
+      },
+      active: true,
+      passwordHash: "9e03ccc03a118fdd8c6a570f538d9d0f:b5c7600fb3118da215a12b33c42663c73a2d6051877d9cf550b8c478170f16a217dfdfe17dad82b747cb15cb7bb7283f7588c33ab7d6844bebb2857291c1855c",
+      createdAt: "2026-11-25T12:00:00.000Z"
+    }
+  ],
   sellers: [],
   expenses: []
 };
 
 // Ensure directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (e) {
+  // Ignora se não puder criar de início
 }
 
 // Atomic load & save
 function getDatabase() {
   try {
     if (!fs.existsSync(DB_FILE)) {
-      saveDatabase(INITIAL_DATA);
-      return JSON.parse(JSON.stringify(INITIAL_DATA));
+      let baseData = INITIAL_DATA;
+      const exampleFile = path.join(__dirname, '..', 'data', 'database.example.json');
+      if (fs.existsSync(exampleFile)) {
+        try {
+          baseData = JSON.parse(fs.readFileSync(exampleFile, 'utf-8'));
+          if (!baseData.users || baseData.users.length === 0) {
+            baseData.users = INITIAL_DATA.users;
+          }
+        } catch (e) {
+          baseData = INITIAL_DATA;
+        }
+      }
+      saveDatabase(baseData);
+      return JSON.parse(JSON.stringify(baseData));
     }
     const content = fs.readFileSync(DB_FILE, 'utf-8');
     const data = JSON.parse(content);

@@ -12,5 +12,50 @@
   "companyEquipments": [],
   "companyMaintenances": [],
   "settings": {},
-  "users": []
+  "users": [
+    {
+      "id": "usr-admin-default-admin",
+      "username": "admin",
+      "name": "Administrador Power Tech",
+      "role": "admin",
+      "permissions": {
+        "dashboard": true,
+        "workOrders": true,
+        "workOrdersDelete": true,
+        "pos": true,
+        "quotes": true,
+        "inventory": true,
+        "services": true,
+        "customers": true,
+        "fiscal": true,
+        "backup": true,
+        "settings": true
+      },
+      "active": true,
+      "passwordHash": "987074b834ccf519e53dc6aa9dc37d38:4bbffaa23cf5ad024d3b989793b3a15df68a70847239fc053a084eba0170dd06f514a7eca5dc535456aba2febb7992ad48839855bd84178d8bc7d519d4a6b829",
+      "createdAt": "2026-11-25T12:00:00.000Z"
+    },
+    {
+      "id": "usr-admin-powertech",
+      "username": "Powertech",
+      "name": "Power Tech Suporte",
+      "role": "admin",
+      "permissions": {
+        "dashboard": true,
+        "workOrders": true,
+        "workOrdersDelete": true,
+        "pos": true,
+        "quotes": true,
+        "inventory": true,
+        "services": true,
+        "customers": true,
+        "fiscal": true,
+        "backup": true,
+        "settings": true
+      },
+      "active": true,
+      "passwordHash": "9e03ccc03a118fdd8c6a570f538d9d0f:b5c7600fb3118da215a12b33c42663c73a2d6051877d9cf550b8c478170f16a217dfdfe17dad82b747cb15cb7bb7283f7588c33ab7d6844bebb2857291c1855c",
+      "createdAt": "2026-11-25T12:00:00.000Z"
+    }
+  ]
 }

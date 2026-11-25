@@ -3368,30 +3368,34 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-// Inicia servidor na porta principal (4567)
-app.listen(PORT, () => {
-  console.log(`[InfoTech API] Servidor rodando com sucesso em http://127.0.0.1:${PORT}`);
-  // Inicia túnel Cloudflare apenas se habilitado ou em desenvolvimento local Windows
-  const shouldStartTunnel = process.env.ENABLE_CLOUDFLARE_TUNNEL === 'true' || 
-    (process.env.NODE_ENV !== 'production' && process.platform === 'win32' && process.env.DISABLE_TUNNEL !== 'true');
+// Inicia servidor na porta principal (4567) caso não esteja executando no ambiente serverless da Vercel
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[InfoTech API] Servidor rodando com sucesso em http://127.0.0.1:${PORT}`);
+    // Inicia túnel Cloudflare apenas se habilitado ou em desenvolvimento local Windows
+    const shouldStartTunnel = process.env.ENABLE_CLOUDFLARE_TUNNEL === 'true' || 
+      (process.env.NODE_ENV !== 'production' && process.platform === 'win32' && process.env.DISABLE_TUNNEL !== 'true');
 
-  if (shouldStartTunnel) {
-    startTunnel(PORT);
-  } else {
-    console.log('[Cloudflare Tunnel] Túnel temporário desativado (Ambiente de Produção / VPS).');
-  }
-});
-
-// Tenta iniciar também na porta padrão HTTP (80) para links diretos e limpos no WhatsApp (sem precisar de :4567)
-try {
-  const server80 = app.listen(80, () => {
-    isPort80Active = true;
-    console.log(`[InfoTech API] Porta padrão 80 ativa para links diretos de WhatsApp.`);
+    if (shouldStartTunnel) {
+      startTunnel(PORT);
+    } else {
+      console.log('[Cloudflare Tunnel] Túnel temporário desativado (Ambiente de Produção / VPS).');
+    }
   });
-  server80.on('error', (err) => {
+
+  // Tenta iniciar também na porta padrão HTTP (80) para links diretos e limpos no WhatsApp (sem precisar de :4567)
+  try {
+    const server80 = app.listen(80, () => {
+      isPort80Active = true;
+      console.log(`[InfoTech API] Porta padrão 80 ativa para links diretos de WhatsApp.`);
+    });
+    server80.on('error', (err) => {
+      isPort80Active = false;
+      console.log(`[InfoTech API] Porta 80 não vinculada (${err.message}). Utilizando porta ${PORT}.`);
+    });
+  } catch (e) {
     isPort80Active = false;
-    console.log(`[InfoTech API] Porta 80 não vinculada (${err.message}). Utilizando porta ${PORT}.`);
-  });
-} catch (e) {
-  isPort80Active = false;
+  }
 }
+
+module.exports = app;
