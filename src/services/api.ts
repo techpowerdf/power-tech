@@ -22,10 +22,12 @@ import {
 } from '../types';
 
 const envApiUrl = (import.meta as any).env?.VITE_API_URL;
-const isDev = typeof window !== 'undefined' && window.location.port === '5173';
+const isLocalVite = typeof window !== 'undefined' && Boolean(
+  window.location.port && window.location.port !== '4567' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+);
 const BASE_URL = envApiUrl
   ? (String(envApiUrl).replace(/\/+$/, '').endsWith('/api') ? String(envApiUrl).replace(/\/+$/, '') : `${String(envApiUrl).replace(/\/+$/, '')}/api`)
-  : (isDev ? 'http://localhost:4567/api' : `${typeof window !== 'undefined' ? window.location.origin : ''}/api`);
+  : (isLocalVite ? 'http://localhost:4567/api' : `${typeof window !== 'undefined' ? window.location.origin : ''}/api`);
 
 const TOKEN_KEY = 'powertech_auth_token';
 
