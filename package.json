@@ -9,6 +9,7 @@
     "dev": "concurrently -k -p \"[{name}]\" -n \"SERVER,CLIENT\" -c \"cyan,blue\" \"node server/index.js\" \"vite\"",
     "start": "concurrently -k -p \"[{name}]\" -n \"SERVER,CLIENT\" -c \"cyan,blue\" \"node server/index.js\" \"vite\"",
     "build": "vite build",
+    "sync:github": "node scripts/sync_github.js",
     "test:security": "node tests/security_and_auth_test.js",
     "desktop": "electron ."
   },

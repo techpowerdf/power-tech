@@ -5,7 +5,7 @@
     box-sizing: border-box;
   }
 
-  /* Padrão para todos os campos de preenchimento em Caixa Alta */
+  /* Padrão para campos gerais em Caixa Alta, exceto quando especificado normal-case ou email/password */
   input[type="text"],
   input[type="search"],
   input:not([type]),
@@ -13,15 +13,18 @@
     text-transform: uppercase;
   }
 
-  input[type="email"],
   .normal-case,
   input.normal-case,
   textarea.normal-case {
+    text-transform: none !important;
+  }
+
+  input[type="email"] {
     text-transform: lowercase;
   }
 
   input[type="password"] {
-    text-transform: none;
+    text-transform: none !important;
   }
 
   /* Correção global para selects e opções no Windows/Chromium (evita menu branco com texto branco) */

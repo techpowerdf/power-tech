@@ -156,11 +156,12 @@ export const AdminPasswordModal: React.FC<AdminPasswordModalProps> = ({
                 }}
                 disabled={isVerifying}
                 placeholder="Digite a senha de admin"
-                className={`w-full pl-9 pr-10 py-2.5 bg-slate-950 border rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none transition-all ${
+                className={`w-full pl-9 pr-10 py-2.5 bg-slate-950 border rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none transition-all normal-case ${
                   error
                     ? 'border-rose-500 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
                     : 'border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500'
                 }`}
+                style={{ textTransform: 'none' }}
               />
               <button
                 type="button"

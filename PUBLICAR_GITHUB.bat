@@ -1,30 +1,33 @@
 @echo off
 chcp 65001 >nul
 echo ======================================================
-echo    PUBLICANDO PROJETO NO GITHUB (techpowerdf/power-tech)
+echo    SINCRONIZANDO PROJETO NO GITHUB (techpowerdf/power-tech)
 echo ======================================================
 echo.
 
 cd /d "%~dp0"
 set "PATH=%LOCALAPPDATA%\Programs\Git\cmd;%PATH%"
 
-echo 1. Verificando status dos arquivos...
-git status
+echo 1. Adicionando alterações...
+git add -A
 
 echo.
-echo 2. Enviando para o GitHub (main)...
-git push -u origin main
+echo 2. Registrando alterações...
+git commit -m "atualizacao automatica: login padrao, escrita dinamica e correcoes" 2>nul
+
+echo.
+echo 3. Enviando para o GitHub (main)...
+git push origin main
 
 if %ERRORLEVEL% EQU 0 (
     echo.
     echo ======================================================
-    echo  SUCESSO! O projeto foi publicado no GitHub!
+    echo  SUCESSO! O projeto foi sincronizado no GitHub!
     echo ======================================================
 ) else (
     echo.
     echo ======================================================
-    echo  ATENCAO: Se solicitada autorizacao, faca o login no
-    echo  navegador para concluir o envio ao GitHub.
+    echo  ATENÇÃO: Se solicitada autorização, confirme o envio.
     echo ======================================================
 )
 echo.
