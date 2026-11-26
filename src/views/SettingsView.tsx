@@ -311,38 +311,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       });
     }
   };
-
-  const [copiedPublicUrl, setCopiedPublicUrl] = useState<boolean>(false);
-  const [isRestartingTunnel, setIsRestartingTunnel] = useState<boolean>(false);
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [isSearchingCnpj, setIsSearchingCnpj] = useState<boolean>(false);
   const [cnpjFeedback, setCnpjFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
-
-  const handleRestartTunnel = async () => {
-    setIsRestartingTunnel(true);
-    try {
-      await fetch('/api/tunnel/restart', { method: 'POST' });
-      setTimeout(async () => {
-        try {
-          const res = await fetch('/api/settings');
-          const data = await res.json();
-          if (data?.publicTrackingUrl) {
-            setFormData((prev) => ({
-              ...prev,
-              publicTrackingUrl: data.publicTrackingUrl,
-              tunnelActive: data.tunnelActive
-            }));
-          }
-        } catch (e) {
-          // ignore
-        } finally {
-          setIsRestartingTunnel(false);
-        }
-      }, 3500);
-    } catch (e) {
-      setIsRestartingTunnel(false);
-    }
-  };
 
   const handleThemeModeChange = (mode: ThemeMode) => {
     setFormData((prev) => ({ ...prev, themeMode: mode }));
@@ -2189,112 +2160,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono leading-relaxed focus:outline-none focus:border-blue-500"
               />
             </div>
-
-            {/* Link de Acompanhamento Online & WhatsApp */}
-            <div className="border-t border-slate-800/80 pt-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Globe className="w-5 h-5 text-blue-400" />
-                  <h4 className="text-sm font-bold text-white">
-                    Link de Acompanhamento para Clientes (WhatsApp & Celular)
-                  </h4>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold uppercase">
-                  Acesso Online
-                </span>
-              </div>
-
-              <div className="bg-slate-950/80 border border-emerald-500/30 rounded-xl p-4 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Cloud className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs font-bold text-white">Servidor em Nuvem Gratuito (Cloudflare)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-[11px] font-bold text-emerald-400">Online & Ativo (Global)</span>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-slate-300 leading-relaxed">
-                  Permite que seus clientes acompanhem a OS de qualquer lugar pelo celular <strong>(4G/5G ou Wi-Fi)</strong> sem custos de hospedagem e sem precisar de configurações no roteador.
-                </p>
-
-                <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/80 rounded-lg p-2 font-mono text-xs text-emerald-400">
-                  <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span className="truncate flex-1 select-all">
-                    {formData.publicTrackingUrl || settings.publicTrackingUrl || formData.detectedLocalUrl || 'Conectando túnel Cloudflare...'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const u = formData.publicTrackingUrl || settings.publicTrackingUrl || formData.detectedLocalUrl || '';
-                      if (u) {
-                        navigator.clipboard.writeText(u);
-                        setCopiedPublicUrl(true);
-                        setTimeout(() => setCopiedPublicUrl(false), 2000);
-                      }
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-sans font-medium transition cursor-pointer"
-                    title="Copiar link do servidor público"
-                  >
-                    {copiedPublicUrl ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedPublicUrl ? 'Copiado!' : 'Copiar'}</span>
-                  </button>
-                  {(formData.publicTrackingUrl || settings.publicTrackingUrl) && (
-                    <a
-                      href={formData.publicTrackingUrl || settings.publicTrackingUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1 px-2.5 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded text-[11px] font-sans font-medium transition border border-blue-500/30"
-                      title="Testar link no navegador"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Testar</span>
-                    </a>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between pt-1 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={handleRestartTunnel}
-                    disabled={isRestartingTunnel}
-                    className="flex items-center gap-1.5 text-slate-400 hover:text-slate-200 transition font-medium cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isRestartingTunnel ? 'animate-spin text-blue-400' : ''}`} />
-                    <span>{isRestartingTunnel ? 'Reconectando servidor...' : 'Reconectar / Gerar novo link'}</span>
-                  </button>
-
-                  {(formData.publicTrackingUrl || settings.publicTrackingUrl) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const u = formData.publicTrackingUrl || settings.publicTrackingUrl || '';
-                        setFormData((prev) => ({ ...prev, systemUrl: u }));
-                      }}
-                      className="text-blue-400 hover:text-blue-300 font-bold underline transition cursor-pointer"
-                    >
-                      Definir como Link Principal das Mensagens
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] text-slate-400 font-medium block mb-1">
-                  URL Personalizada / Domínio Próprio (Opcional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: https://meudominio.com ou deixe vazio para usar o servidor gratuito automático"
-                  value={formData.systemUrl || ''}
-                  onChange={(e) => setFormData({ ...formData, systemUrl: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                />
-              </div>
-            </div>
-
             {/* Mensagem ao Marcar Pronto para Retirada (Concluída) via WhatsApp */}
             <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">

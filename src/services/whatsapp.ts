@@ -152,97 +152,15 @@ export const formatClickableUrl = (rawUrl: string, store?: StoreSettings): strin
  * Retorna o link de acompanhamento público em tempo real da Ordem de Serviço.
  * Utiliza o trackingToken criptográfico aleatório para impedir vazamento de dados de outras OSs.
  */
-export const getWorkOrderTrackingUrl = (os: WorkOrder, store?: StoreSettings): string => {
-  const osTrackingKey = os.trackingToken || (os.number ? String(os.number) : os.id);
-
-  // 1. URL pública na nuvem (Cloudflare Tunnel gratuito - acesso global por 4G/5G/Wi-Fi)
-  if (store?.publicTrackingUrl && store.publicTrackingUrl.trim().length > 0) {
-    const base = store.publicTrackingUrl.trim().replace(/\/+$/, '');
-    return `${base}/?track=${encodeURIComponent(osTrackingKey)}`;
-  }
-
-  // 2. URL pública configurada pelo lojista (ex: https://powertech.meudominio.com ou túnel cloudflare)
-  if (store?.systemUrl && store.systemUrl.trim().length > 0) {
-    const base = store.systemUrl.trim().replace(/\/+$/, '');
-    if (base.includes('trycloudflare.com') || base.startsWith('https://')) {
-      return `${base}/?track=${encodeURIComponent(osTrackingKey)}`;
-    }
-    return formatClickableUrl(`${base}/?track=${encodeURIComponent(osTrackingKey)}`, store);
-  }
-
-  // 3. URL de rede detectada pelo servidor com suporte a Cloudflare / .nip.io
-  if (store?.detectedLocalUrl && store.detectedLocalUrl.trim().length > 0) {
-    const base = store.detectedLocalUrl.trim().replace(/\/+$/, '');
-    if (base.includes('trycloudflare.com') || base.startsWith('https://')) {
-      return `${base}/?track=${encodeURIComponent(osTrackingKey)}`;
-    }
-    return formatClickableUrl(`${base}/?track=${encodeURIComponent(osTrackingKey)}`, store);
-  }
-
-  // 4. Fallback do IP detectado com .nip.io
-  if (store?.detectedLocalIp && store.detectedLocalIp !== 'localhost') {
-    return `http://${store.detectedLocalIp}.nip.io/?track=${encodeURIComponent(osTrackingKey)}`;
-  }
-
-  // 5. Fallback do navegador
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname);
-    if (isIp && hostname !== '127.0.0.1') {
-      const portPart = window.location.port && window.location.port !== '80' ? `:${window.location.port}` : '';
-      return `http://${hostname}.nip.io${portPart}/?track=${encodeURIComponent(osTrackingKey)}`;
-    }
-    const origin = window.location.origin;
-    return `${origin}/?track=${encodeURIComponent(osTrackingKey)}`;
-  }
-
-  return `http://localhost:4567/?track=${encodeURIComponent(osTrackingKey)}`;
+export const getWorkOrderTrackingUrl = (_os: WorkOrder, _store?: StoreSettings): string => {
+  return '';
 };
 
 /**
  * Retorna o link de acompanhamento público do comprovante/recibo de venda.
  */
-export const getSaleReceiptTrackingUrl = (sale: Sale, store?: StoreSettings): string => {
-  const saleReceiptKey = sale.receiptToken || (sale.number ? String(sale.number) : sale.id);
-
-  // 1. URL pública na nuvem (Cloudflare Tunnel gratuito)
-  if (store?.publicTrackingUrl && store.publicTrackingUrl.trim().length > 0) {
-    const base = store.publicTrackingUrl.trim().replace(/\/+$/, '');
-    return `${base}/?trackSale=${encodeURIComponent(saleReceiptKey)}`;
-  }
-
-  if (store?.systemUrl && store.systemUrl.trim().length > 0) {
-    const base = store.systemUrl.trim().replace(/\/+$/, '');
-    if (base.includes('trycloudflare.com') || base.startsWith('https://')) {
-      return `${base}/?trackSale=${encodeURIComponent(saleReceiptKey)}`;
-    }
-    return formatClickableUrl(`${base}/?trackSale=${encodeURIComponent(saleReceiptKey)}`, store);
-  }
-
-  if (store?.detectedLocalUrl && store.detectedLocalUrl.trim().length > 0) {
-    const base = store.detectedLocalUrl.trim().replace(/\/+$/, '');
-    if (base.includes('trycloudflare.com') || base.startsWith('https://')) {
-      return `${base}/?trackSale=${encodeURIComponent(saleReceiptKey)}`;
-    }
-    return formatClickableUrl(`${base}/?trackSale=${encodeURIComponent(saleReceiptKey)}`, store);
-  }
-
-  if (store?.detectedLocalIp && store.detectedLocalIp !== 'localhost') {
-    return `http://${store.detectedLocalIp}.nip.io/?trackSale=${encodeURIComponent(saleReceiptKey)}`;
-  }
-
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname);
-    if (isIp && hostname !== '127.0.0.1') {
-      const portPart = window.location.port && window.location.port !== '80' ? `:${window.location.port}` : '';
-      return `http://${hostname}.nip.io${portPart}/?trackSale=${encodeURIComponent(saleReceiptKey)}`;
-    }
-    const origin = window.location.origin;
-    return `${origin}/?trackSale=${encodeURIComponent(saleReceiptKey)}`;
-  }
-
-  return `http://localhost:4567/?trackSale=${encodeURIComponent(saleReceiptKey)}`;
+export const getSaleReceiptTrackingUrl = (_sale: Sale, _store?: StoreSettings): string => {
+  return '';
 };
 
 /**

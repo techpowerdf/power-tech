@@ -1102,7 +1102,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
       </div>
 
       {/* Navegação entre Abas do Módulo */}
-      <div className="flex items-center gap-1 border-b border-slate-800">
+      <div className="flex items-center gap-1 border-b border-slate-800 overflow-x-auto whitespace-nowrap pb-1 scrollbar-thin scrollbar-thumb-slate-800">
         <button
           type="button"
           onClick={() => { setActiveTab('empresas'); setSelectedEquipmentForHistory(null); }}

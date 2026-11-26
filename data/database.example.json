@@ -1,17 +1,60 @@
 {
-  "workOrders": [],
-  "sales": [],
+  "storeSettings": {
+    "storeName": "Power Tech - Assistência Técnica & Vendas",
+    "tradeName": "Power Tech",
+    "cnpj": "12.345.678/0001-90",
+    "ie": "123.456.789.110",
+    "phone": "(11) 3456-7890",
+    "whatsapp": "5511987654321",
+    "email": "contato@powertech.com.br",
+    "street": "Av. Principal do Comércio",
+    "number": "500",
+    "neighborhood": "Centro",
+    "city": "São Paulo",
+    "state": "SP",
+    "cep": "01001-000",
+    "pixKey": "12.345.678/0001-90",
+    "pixType": "cnpj",
+    "warrantyTerms": "1. A garantia cobre exclusivamente os serviços executados e peças substituídas pelo prazo de 90 dias (conforme Art. 26 do Código de Defesa do Consumidor).\n2. A garantia é automaticamente invalidada em caso de violação dos lacres internos, queda física, derramamento de líquidos, descargas elétricas ou intervenção de terceiros.\n3. O cliente tem o prazo máximo de 90 dias para retirar o equipamento pronto ou com orçamento recusado, sob pena de cobrança de taxa de guarda ou descarte conforme a lei.",
+    "printerType": "termica_80mm",
+    "autoPrintAfterSave": true,
+    "osDeliveredMessageEnabled": false,
+    "osDeliveredMessageTemplate": "Olá, *{cliente}*! 👋\n\nSeu equipamento *{equipamento}* (Ordem de Serviço *#{numero_os}*) foi entregue com sucesso! 🤝🎉\n\nAgradecemos imensamente pela preferência e pela confiança em nossos serviços.\n\nQualquer dúvida ou caso necessite de suporte, estamos à sua inteira disposição!\n\n_Power Tech - Qualidade e transparência para você!_ 🚀",
+    "posSaleMessageEnabled": false,
+    "posSaleMessageTemplate": "Olá, *{cliente}*! 👋\n\nAgradecemos imensamente pela preferência em realizar sua compra conosco na *{loja}*! 🤝🎉\n\nQualquer dúvida sobre os produtos ou caso precise de suporte com a garantia, conte sempre conosco!\n\n_Power Tech - Volte sempre!_ 🚀"
+  },
+  "fiscalConfig": {
+    "companyName": "Power Tech Soluções em Informática Ltda",
+    "tradeName": "Power Tech",
+    "cnpj": "12.345.678/0001-90",
+    "stateRegistration": "123.456.789.110",
+    "municipalRegistration": "987654-3",
+    "taxRegime": "simples_nacional",
+    "apiProvider": "simulador",
+    "apiToken": "TOKEN_DEMO_NUVEM_FISCAL_12345",
+    "environment": "homologacao",
+    "defaultNfeCfop": "5102",
+    "defaultNfseCnae": "9511-8/00",
+    "defaultNfseServiceCode": "14.01",
+    "issRate": 3.5
+  },
+  "backupSettings": {
+    "autoDailyBackup": true,
+    "backupTime": "18:00",
+    "backupDirectory": "C:\\PowerTech_Backups",
+    "lastBackupAt": "2026-11-25T12:00:00.000Z",
+    "lastBackupStatus": "sucesso",
+    "lastBackupMessage": "Backup inicial gerado com sucesso.",
+    "retainDays": 30
+  },
+  "backupHistory": [],
   "customers": [],
   "products": [],
   "services": [],
+  "workOrders": [],
+  "sales": [],
   "quotes": [],
-  "expenses": [],
-  "sellers": [],
-  "companies": [],
-  "companyPlans": [],
-  "companyEquipments": [],
-  "companyMaintenances": [],
-  "settings": {},
+  "fiscalInvoices": [],
   "users": [
     {
       "id": "usr-admin-default-admin",
@@ -57,5 +100,11 @@
       "passwordHash": "9e03ccc03a118fdd8c6a570f538d9d0f:b5c7600fb3118da215a12b33c42663c73a2d6051877d9cf550b8c478170f16a217dfdfe17dad82b747cb15cb7bb7283f7588c33ab7d6844bebb2857291c1855c",
       "createdAt": "2026-11-25T12:00:00.000Z"
     }
-  ]
+  ],
+  "sellers": [],
+  "expenses": [],
+  "companies": [],
+  "companyPlans": [],
+  "companyEquipments": [],
+  "companyMaintenances": []
 }

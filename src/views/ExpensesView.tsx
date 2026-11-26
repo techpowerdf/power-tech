@@ -784,7 +784,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
       {/* Tabela Principal de Gastos */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div className="p-4 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-4 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <TrendingDown className="w-4 h-4 text-rose-400" />
             <h3 className="text-xs font-bold text-white uppercase tracking-wider">
@@ -796,7 +796,8 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           </span>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Tabela Desktop (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="bg-slate-950/90 text-[11px] font-bold uppercase text-slate-400 border-b border-slate-800">
               <tr>
@@ -881,6 +882,83 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Cards Mobile (< md) */}
+        <div className="md:hidden divide-y divide-slate-800/60 p-2 space-y-3">
+          {filteredExpenses.length === 0 ? (
+            <div className="text-center py-8 text-slate-500 text-xs italic">
+              Nenhum gasto encontrado para os filtros selecionados.
+            </div>
+          ) : (
+            filteredExpenses.map((exp) => {
+              const catCfg = getCategoryConfig(exp.category);
+              const Icon = resolveCategoryIcon(catCfg.iconName);
+              return (
+                <div key={exp.id} className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${catCfg.bgColor} ${catCfg.color} ${catCfg.borderColor}`}
+                        >
+                          <Icon className="w-3 h-3" />
+                          <span>{catCfg.shortLabel || catCfg.label}</span>
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {exp.date ? new Date(exp.date + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+                        </span>
+                      </div>
+                      <h4 className="font-bold text-white text-sm line-clamp-2">{exp.description}</h4>
+                      {exp.notes && (
+                        <p className="text-[11px] text-slate-400 italic mt-0.5 line-clamp-2">{exp.notes}</p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-mono font-black text-rose-400 text-base block">
+                        {hideRevenue ? '••••••' : `R$ ${Number(exp.amount || 0).toFixed(2)}`}
+                      </span>
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                        {exp.paymentMethod || 'DINHEIRO'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
+                    <div>
+                      {exp.sellerName ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                          <Users className="w-2.5 h-2.5" />
+                          <span>{exp.sellerName}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 font-semibold">Geral / Empresa</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(exp)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Editar</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(exp)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 text-xs font-semibold transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Excluir</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -1062,18 +1140,18 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
               </div>
 
               {/* Buttons */}
-              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-800">
+              <div className="pt-2 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition text-center"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-rose-600/30 disabled:opacity-50"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-rose-600/30 disabled:opacity-50 text-center"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>{isSaving ? 'Salvando...' : editingExpense ? 'Atualizar Gasto' : 'Salvar Gasto'}</span>

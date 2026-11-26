@@ -1,5 +1,5 @@
 import React from 'react';
-import { DatabaseBackup, Clock, ShieldCheck, Eye, EyeOff, LogOut, User as UserIcon } from 'lucide-react';
+import { DatabaseBackup, Clock, ShieldCheck, Eye, EyeOff, LogOut, User as UserIcon, Menu } from 'lucide-react';
 import { NavTab } from './Sidebar';
 import { AuthUser } from '../types';
 
@@ -13,6 +13,7 @@ interface HeaderProps {
   onToggleHideRevenue?: () => void;
   currentUser?: AuthUser | null;
   onLogout?: () => void;
+  onToggleMobileMenu?: () => void;
 }
 
 const TAB_TITLES: Record<NavTab, { title: string; subtitle: string }> = {
@@ -79,7 +80,8 @@ export const Header: React.FC<HeaderProps> = ({
   hideRevenue = false,
   onToggleHideRevenue,
   currentUser,
-  onLogout
+  onLogout,
+  onToggleMobileMenu
 }) => {
   const currentInfo = TAB_TITLES[currentTab] || {
     title: 'Power Tech',
@@ -94,19 +96,38 @@ export const Header: React.FC<HeaderProps> = ({
   }).format(new Date());
 
   return (
-    <header className="bg-slate-900 border-b border-slate-800/80 px-6 py-4 flex items-center justify-between no-print shrink-0">
-      <div>
-        <h2 className="text-xl font-bold text-white tracking-tight">{currentInfo.title}</h2>
-        <p className="text-xs text-slate-400 mt-0.5">{currentInfo.subtitle}</p>
+    <header className="bg-slate-900 border-b border-slate-800/80 px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between no-print shrink-0 gap-2">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        {/* Botão Hamburger para Mobile */}
+        {onToggleMobileMenu && (
+          <button
+            type="button"
+            onClick={onToggleMobileMenu}
+            className="lg:hidden p-2 -ml-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl active:scale-95 transition shrink-0 focus:outline-none"
+            aria-label="Abrir menu de navegação"
+            title="Abrir menu de navegação"
+          >
+            <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
+          </button>
+        )}
+
+        <div className="min-w-0">
+          <h2 className="text-sm sm:text-lg md:text-xl font-bold text-white tracking-tight truncate">
+            {currentInfo.title}
+          </h2>
+          <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate hidden xs:block sm:block">
+            {currentInfo.subtitle}
+          </p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Botão de Ocultar/Exibir Faturamentos */}
         {onToggleHideRevenue && (
           <button
             type="button"
             onClick={onToggleHideRevenue}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition active:scale-95 ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold border transition active:scale-95 ${
               hideRevenue
                 ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25 shadow-sm shadow-amber-500/10'
                 : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white hover:bg-slate-700'
@@ -120,19 +141,19 @@ export const Header: React.FC<HeaderProps> = ({
             {hideRevenue ? (
               <>
                 <EyeOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="hidden sm:inline">Faturamento Oculto</span>
+                <span className="hidden md:inline">Faturamento Oculto</span>
               </>
             ) : (
               <>
                 <Eye className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="hidden sm:inline">Ocultar Faturamento</span>
+                <span className="hidden md:inline">Ocultar Faturamento</span>
               </>
             )}
           </button>
         )}
 
-        {/* Date Display */}
-        <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700/50">
+        {/* Date Display (Oculto em telas pequenas para evitar overflow) */}
+        <div className="hidden xl:flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700/50">
           <Clock className="w-3.5 h-3.5 text-blue-400" />
           <span className="capitalize">{todayFormatted}</span>
         </div>
@@ -140,7 +161,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Backup Status Pill */}
         <button
           onClick={onOpenBackupTab}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
             backupSuccess
               ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
               : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
@@ -148,21 +169,21 @@ export const Header: React.FC<HeaderProps> = ({
           title="Clique para abrir as configurações de backup"
         >
           {backupSuccess ? (
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
           ) : (
-            <DatabaseBackup className="w-4 h-4 text-amber-400" />
+            <DatabaseBackup className="w-4 h-4 text-amber-400 shrink-0" />
           )}
-          <span>Backup Diário: {lastBackupText}</span>
+          <span className="hidden sm:inline">Backup: {lastBackupText}</span>
         </button>
 
         {/* Usuário e Logout */}
         {currentUser && (
-          <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700/60 rounded-xl px-2.5 py-1">
-            <div className="w-6 h-6 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center text-xs">
+          <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-800/60 border border-slate-700/60 rounded-xl px-2 sm:px-2.5 py-1">
+            <div className="w-6 h-6 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center text-xs shrink-0">
               <UserIcon className="w-3.5 h-3.5" />
             </div>
             <div className="text-left hidden lg:block">
-              <span className="text-[11px] font-bold text-white block leading-tight truncate max-w-[100px]">
+              <span className="text-[11px] font-bold text-white block leading-tight truncate max-w-[90px]">
                 {currentUser.name.split(' ')[0]}
               </span>
               <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-mono">
@@ -173,7 +194,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onLogout}
-                className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition ml-1"
+                className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
                 title="Sair do sistema (Logout)"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -182,12 +203,12 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
 
-        {/* Store Identifier */}
-        <div className="text-right">
-          <span className="text-xs font-semibold text-slate-200 block">{storeName}</span>
+        {/* Store Identifier (visível apenas em telas maiores) */}
+        <div className="text-right hidden sm:block">
+          <span className="text-xs font-semibold text-slate-200 block truncate max-w-[120px]">{storeName}</span>
           <span className="text-[10px] text-emerald-400 flex items-center gap-1 justify-end">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            Sistema Operacional
+            Online
           </span>
         </div>
       </div>

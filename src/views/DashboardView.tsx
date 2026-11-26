@@ -115,112 +115,112 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [recentWorkOrders]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Top Action Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         <button
           onClick={onNewOS}
-          className="flex items-center gap-3 p-3.5 rounded-xl bg-blue-600/15 border border-blue-500/30 hover:bg-blue-600/25 transition text-left group cursor-pointer"
+          className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3.5 rounded-xl bg-blue-600/15 border border-blue-500/30 hover:bg-blue-600/25 transition text-left group cursor-pointer active:scale-[0.98]"
         >
-          <div className="p-2.5 rounded-lg bg-blue-600 text-white shadow-md shadow-blue-600/30 group-hover:scale-105 transition">
-            <PlusCircle className="w-5 h-5" />
+          <div className="p-2 sm:p-2.5 rounded-lg bg-blue-600 text-white shadow-md shadow-blue-600/30 group-hover:scale-105 transition shrink-0">
+            <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <h4 className="text-xs font-bold text-white">Nova OS</h4>
-            <p className="text-[11px] text-slate-400">Entrada de aparelho</p>
+          <div className="min-w-0">
+            <h4 className="text-xs font-bold text-white truncate">Nova OS</h4>
+            <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">Entrada aparelho</p>
           </div>
         </button>
 
         <button
           onClick={onNewSale}
-          className="flex items-center gap-3 p-3.5 rounded-xl bg-emerald-600/15 border border-emerald-500/30 hover:bg-emerald-600/25 transition text-left group cursor-pointer"
+          className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3.5 rounded-xl bg-emerald-600/15 border border-emerald-500/30 hover:bg-emerald-600/25 transition text-left group cursor-pointer active:scale-[0.98]"
         >
-          <div className="p-2.5 rounded-lg bg-emerald-600 text-white shadow-md shadow-emerald-600/30 group-hover:scale-105 transition">
-            <ShoppingCart className="w-5 h-5" />
+          <div className="p-2 sm:p-2.5 rounded-lg bg-emerald-600 text-white shadow-md shadow-emerald-600/30 group-hover:scale-105 transition shrink-0">
+            <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <h4 className="text-xs font-bold text-white">Venda no Balcão</h4>
-            <p className="text-[11px] text-slate-400">Abrir caixa / PDV</p>
+          <div className="min-w-0">
+            <h4 className="text-xs font-bold text-white truncate">Venda Balcão</h4>
+            <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">Caixa / PDV</p>
           </div>
         </button>
 
         <button
           onClick={onNewQuote}
-          className="flex items-center gap-3 p-3.5 rounded-xl bg-purple-600/15 border border-purple-500/30 hover:bg-purple-600/25 transition text-left group cursor-pointer"
+          className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3.5 rounded-xl bg-purple-600/15 border border-purple-500/30 hover:bg-purple-600/25 transition text-left group cursor-pointer active:scale-[0.98]"
         >
-          <div className="p-2.5 rounded-lg bg-purple-600 text-white shadow-md shadow-purple-600/30 group-hover:scale-105 transition">
-            <FileSpreadsheet className="w-5 h-5" />
+          <div className="p-2 sm:p-2.5 rounded-lg bg-purple-600 text-white shadow-md shadow-purple-600/30 group-hover:scale-105 transition shrink-0">
+            <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <h4 className="text-xs font-bold text-white">Novo Orçamento</h4>
-            <p className="text-[11px] text-slate-400">Cotação de serviço/peça</p>
+          <div className="min-w-0">
+            <h4 className="text-xs font-bold text-white truncate">Novo Orçamento</h4>
+            <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">Cotação serviço</p>
           </div>
         </button>
 
         {onNewExpense && (
           <button
             onClick={onNewExpense}
-            className="flex items-center gap-3 p-3.5 rounded-xl bg-rose-600/15 border border-rose-500/30 hover:bg-rose-600/25 transition text-left group cursor-pointer"
+            className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3.5 rounded-xl bg-rose-600/15 border border-rose-500/30 hover:bg-rose-600/25 transition text-left group cursor-pointer active:scale-[0.98]"
           >
-            <div className="p-2.5 rounded-lg bg-rose-600 text-white shadow-md shadow-rose-600/30 group-hover:scale-105 transition">
-              <TrendingDown className="w-5 h-5" />
+            <div className="p-2 sm:p-2.5 rounded-lg bg-rose-600 text-white shadow-md shadow-rose-600/30 group-hover:scale-105 transition shrink-0">
+              <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <h4 className="text-xs font-bold text-white">Inserir Gasto</h4>
-              <p className="text-[11px] text-slate-400">Despesa / saída financeira</p>
+            <div className="min-w-0">
+              <h4 className="text-xs font-bold text-white truncate">Inserir Gasto</h4>
+              <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">Saída financeira</p>
             </div>
           </button>
         )}
 
         <button
           onClick={onQuickBackup}
-          className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 hover:bg-slate-800 transition text-left group cursor-pointer"
+          className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 hover:bg-slate-800 transition text-left group cursor-pointer active:scale-[0.98] col-span-2 sm:col-span-1"
         >
-          <div className="p-2.5 rounded-lg bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20 group-hover:scale-105 transition">
-            <DatabaseBackup className="w-5 h-5" />
+          <div className="p-2 sm:p-2.5 rounded-lg bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20 group-hover:scale-105 transition shrink-0">
+            <DatabaseBackup className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <h4 className="text-xs font-bold text-white">Backup Seguro</h4>
-            <p className="text-[11px] text-emerald-400">Cópia diária protegida</p>
+          <div className="min-w-0">
+            <h4 className="text-xs font-bold text-white truncate">Backup Seguro</h4>
+            <p className="text-[10px] sm:text-[11px] text-emerald-400 truncate">Cópia diária</p>
           </div>
         </button>
       </div>
 
       {/* KPI Cards Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
           Visão Geral & Indicadores
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={() => onNavigate('relatorios')}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition shrink-0"
             title="Abrir Relatório de Faturamento Geral (Vendas + Serviços) por vendedor"
           >
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Relatório de Faturamento Geral</span>
+            <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Relatório Geral</span>
           </button>
           {onToggleHideRevenue && (
             <button
               type="button"
               onClick={onToggleHideRevenue}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition shrink-0 ${
                 hideRevenue
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
                   : 'bg-slate-800/80 text-slate-400 border-slate-700/80 hover:text-white hover:bg-slate-800'
               }`}
               title={hideRevenue ? 'Exibir valores de faturamento' : 'Ocultar valores de faturamento'}
             >
-              {hideRevenue ? <EyeOff className="w-3.5 h-3.5 text-amber-400" /> : <Eye className="w-3.5 h-3.5" />}
-              <span>{hideRevenue ? 'Faturamento Oculto' : 'Ocultar Faturamento'}</span>
+              {hideRevenue ? <EyeOff className="w-3.5 h-3.5 text-amber-400 shrink-0" /> : <Eye className="w-3.5 h-3.5 shrink-0" />}
+              <span className="truncate">{hideRevenue ? 'Faturamento Oculto' : 'Ocultar Faturamento'}</span>
             </button>
           )}
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Vendas Hoje */}
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl relative overflow-hidden">
           <div className="flex justify-between items-start">
@@ -347,20 +347,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {sortedRecentWorkOrders.map((os) => (
               <div
                 key={os.id}
-                className={`p-3 rounded-lg border flex items-center justify-between transition ${
+                className={`p-2.5 sm:p-3 rounded-lg border flex items-center justify-between gap-2 transition ${
                   os.status === 'sem_reparo' || os.status === 'descarte' || os.status === 'entregue' || os.status === 'cancelada'
                     ? 'bg-slate-950/95 border-zinc-800 brightness-[0.55] opacity-75 hover:brightness-75'
                     : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                   <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
                     {getEquipmentIcon(os.equipmentType)}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       <span
-                        className="font-bold app-os-number"
+                        className="font-bold app-os-number shrink-0"
                         style={{
                           fontSize: 'var(--app-os-number-size, 14px)',
                           color: 'var(--app-os-number-color, #38bdf8)'
@@ -368,11 +368,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       >
                         OS #{os.number}
                       </span>
-                      <span className="text-[11px] text-slate-400 font-medium">
+                      <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate">
                         {os.brand} {os.model}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 truncate">
                       <span
                         className="font-semibold app-customer-name"
                         style={{
@@ -387,21 +387,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                   <div className="flex flex-col items-end">
                     {getStatusBadge(os.status)}
                     {os.status === 'entregue' && os.deliveredDate && (
-                      <span className="text-[10px] text-emerald-400 font-semibold mt-1">
-                        📅 Entregue: {new Date(os.deliveredDate).toLocaleDateString('pt-BR')} {new Date(os.deliveredDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      <span className="text-[9px] sm:text-[10px] text-emerald-400 font-semibold mt-1 hidden sm:block">
+                        📅 {new Date(os.deliveredDate).toLocaleDateString('pt-BR')}
                       </span>
                     )}
                   </div>
                   <button
                     onClick={() => onPrintOS(os)}
-                    className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                    className="p-1.5 sm:p-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
                     title="Imprimir OS"
                   >
-                    <Printer className="app-action-icon" />
+                    <Printer className="app-action-icon w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
                 </div>
               </div>
@@ -429,30 +429,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {recentSales.map((sale) => (
               <div
                 key={sale.id}
-                className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-slate-700 flex items-center justify-between transition"
+                className="p-2.5 sm:p-3 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-slate-700 flex items-center justify-between gap-2 transition"
               >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-xs text-white">Venda #{sale.number}</span>
-                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <span className="font-bold text-xs text-white shrink-0">Venda #{sale.number}</span>
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 shrink-0">
                       {sale.paymentMethod}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 truncate">
                     {sale.items.length} {sale.items.length === 1 ? 'item' : 'itens'} &bull; {sale.customerName || 'Balcão'}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                   <span className="font-bold text-xs text-emerald-400">
                     {hideRevenue ? '•••••' : `R$ ${Number(sale.total).toFixed(2)}`}
                   </span>
                   <button
                     onClick={() => onPrintSale(sale)}
-                    className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                    className="p-1.5 sm:p-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
                     title="Imprimir Cupom"
                   >
-                    <Printer className="w-3.5 h-3.5" />
+                    <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
                 </div>
               </div>

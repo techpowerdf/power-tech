@@ -39,7 +39,6 @@ import {
   openWhatsAppWithText,
   formatWorkOrderWhatsAppMessage,
   formatWorkOrderReadyWhatsAppMessage,
-  getWorkOrderTrackingUrl,
   sendWorkOrderDeliveredWhatsApp,
   sendWorkOrderViaWhatsApp,
   savePdfWithLocationPicker
@@ -117,7 +116,6 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const [editingOS, setEditingOS] = useState<WorkOrder | null>(null);
   const [viewingOS, setViewingOS] = useState<WorkOrder | null>(null);
   const [osForAddingItems, setOsForAddingItems] = useState<WorkOrder | null>(null);
-  const [copiedTrackLink, setCopiedTrackLink] = useState<boolean>(false);
   const [whatsAppModalOS, setWhatsAppModalOS] = useState<WorkOrder | null>(null);
 
   // Modal de Histórico de Cliente
@@ -1207,11 +1205,11 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Abas Superiores de Navegação da OS */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-2 gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 max-w-full">
           <button
             onClick={() => setActiveMainTab('ordens')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-bold whitespace-nowrap transition shrink-0 ${
               activeMainTab === 'ordens'
                 ? 'shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-850'
@@ -1238,7 +1236,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
           <button
             onClick={() => setActiveMainTab('historico')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-bold whitespace-nowrap transition shrink-0 ${
               activeMainTab === 'historico'
                 ? 'shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-850'
@@ -1250,7 +1248,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
             }}
           >
             <Calendar style={{ width: 'var(--app-icon-size, 16px)', height: 'var(--app-icon-size, 16px)' }} />
-            <span>Histórico Diário de OS</span>
+            <span>Histórico Diário</span>
             <span
               className="px-1.5 py-0.2 rounded-full"
               style={{
@@ -1271,7 +1269,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
           <button
             onClick={() => setActiveMainTab('relatorio')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-bold whitespace-nowrap transition shrink-0 ${
               activeMainTab === 'relatorio'
                 ? 'shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-850'
@@ -1283,14 +1281,14 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
             }}
           >
             <BarChart3 style={{ width: 'var(--app-icon-size, 16px)', height: 'var(--app-icon-size, 16px)' }} />
-            <span>Relatório de Faturamento de OS</span>
+            <span>Relatório Faturamento</span>
           </button>
         </div>
 
         {activeMainTab === 'relatorio' && (
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition shrink-0"
           >
             <Printer className="w-3.5 h-3.5 text-slate-300" />
             <span>Imprimir Relatório</span>
@@ -1367,9 +1365,10 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
             })}
           </div>
 
-          {/* Work Orders Table */}
+          {/* Work Orders Table & Mobile Cards */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
+            {/* Visualização em Tabela para Computador / Tablet */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-950/80 text-[11px] font-bold uppercase text-slate-400 border-b border-slate-800">
                   <tr>
@@ -1530,16 +1529,6 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                               <MessageSquare className="app-action-icon" />
                             </button>
                             <button
-                              onClick={() => {
-                                const url = getWorkOrderTrackingUrl(os, storeSettings);
-                                window.open(url, '_blank');
-                              }}
-                              className="p-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 transition"
-                              title="Abrir Link de Acompanhamento do Cliente em Nova Aba"
-                            >
-                              <ExternalLink className="app-action-icon" />
-                            </button>
-                            <button
                               onClick={() => onPrintWorkOrder(os)}
                               className="p-1.5 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 transition"
                               title="Imprimir OS (A4 ou Térmica)"
@@ -1584,6 +1573,160 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Visualização Otimizada em Cards para Dispositivos Móveis (Celulares) */}
+            <div className="md:hidden divide-y divide-slate-800/80">
+              {filteredWorkOrders.length > 0 ? (
+                filteredWorkOrders.map((os) => (
+                  <div
+                    key={os.id}
+                    className={`p-3 space-y-2.5 transition ${
+                      isDimmedOSStatus(os.status)
+                        ? 'bg-slate-950/95 brightness-[0.6] opacity-80'
+                        : 'bg-slate-900/90'
+                    }`}
+                  >
+                    {/* Topo do Card: Número OS, Data e Status */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => setViewingOS(os)}
+                          className="font-black text-sm text-sky-400 hover:underline shrink-0"
+                          title="Visualizar OS"
+                        >
+                          #{os.number}
+                        </button>
+                        <span className="text-[10px] text-slate-400 truncate">
+                          {os.entryDate ? new Date(os.entryDate).toLocaleDateString('pt-BR') : '-'}
+                        </span>
+                      </div>
+                      <div className="shrink-0">
+                        <select
+                          value={os.status}
+                          onChange={(e) => handleQuickStatusChange(os, e.target.value as WorkOrderStatus)}
+                          className={`text-[11px] font-bold rounded-lg px-2 py-1 bg-slate-950 border focus:outline-none cursor-pointer ${
+                            os.status === 'concluida'
+                              ? 'border-emerald-500/50 text-emerald-400'
+                              : isDimmedOSStatus(os.status)
+                              ? 'border-zinc-700 text-zinc-300'
+                              : os.status === 'manutencao'
+                              ? 'border-amber-500/50 text-amber-400'
+                              : 'border-blue-500/50 text-blue-400'
+                          }`}
+                        >
+                          <option value="aberta">Aberta</option>
+                          <option value="analise">Em Análise</option>
+                          <option value="orcamento">Orçamento</option>
+                          <option value="aprovada">Aprovada</option>
+                          <option value="manutencao">Na Bancada</option>
+                          <option value="aguardando_peca">Aguardando Peça</option>
+                          <option value="concluida">Pronta Retirada</option>
+                          <option value="entregue">Entregue</option>
+                          <option value="sem_reparo">Sem Reparo</option>
+                          <option value="descarte">Descarte</option>
+                          <option value="cancelada">Cancelada</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Cliente e Valor Total */}
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenHistoryForOS(os)}
+                        className="font-bold text-white hover:text-blue-400 text-left truncate flex items-center gap-1.5 text-xs min-w-0 flex-1"
+                        title="Ver histórico do cliente"
+                      >
+                        <span className="truncate">{os.customerName}</span>
+                        <History className="w-3 h-3 text-blue-400 opacity-70 shrink-0" />
+                      </button>
+                      <span className="font-extrabold text-emerald-400 text-xs shrink-0 ml-1">
+                        {hideRevenue ? '•••••' : `R$ ${Number(os.total).toFixed(2)}`}
+                      </span>
+                    </div>
+
+                    {/* Equipamento e Informações Técnicas */}
+                    <div className="flex items-center gap-2 text-[11px] text-slate-300 bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
+                      <div className="w-6 h-6 rounded bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
+                        {getEquipmentIcon(os.equipmentType, 'w-3.5 h-3.5')}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="font-semibold block truncate">{os.brand} {os.model}</span>
+                        <span className="text-slate-500 text-[10px] uppercase truncate block">
+                          {os.equipmentType} {os.serialNumber ? `• S/N: ${os.serialNumber}` : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Defeito Relatado */}
+                    {os.reportedDefect && (
+                      <p className="text-[10px] text-slate-400 line-clamp-2 bg-slate-950/30 px-2 py-1 rounded border border-slate-800/40">
+                        <span className="text-slate-500 font-semibold">Defeito: </span>
+                        {os.reportedDefect}
+                      </p>
+                    )}
+
+                    {/* Barra de Ações Mobile com Toque Confortável */}
+                    <div className="grid grid-cols-6 gap-1 pt-1.5 border-t border-slate-800/60">
+                      <button
+                        type="button"
+                        onClick={() => setViewingOS(os)}
+                        className="flex flex-col items-center justify-center p-2 rounded-lg bg-indigo-500/15 text-indigo-400 active:scale-95 transition"
+                        title="Ver detalhes da OS"
+                      >
+                        <Eye className="w-4 h-4" />
+                        <span className="text-[8px] mt-0.5 font-bold">Ver</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setOsForAddingItems(os)}
+                        className="flex flex-col items-center justify-center p-2 rounded-lg bg-amber-500/15 text-amber-400 active:scale-95 transition"
+                        title="Adicionar Peças ou Serviços"
+                      >
+                        <PlusCircle className="w-4 h-4" />
+                        <span className="text-[8px] mt-0.5 font-bold">+ Peça</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => sendWhatsAppNotification(os)}
+                        className="flex flex-col items-center justify-center p-2 rounded-lg bg-emerald-500/15 text-emerald-400 active:scale-95 transition"
+                        title="Enviar no WhatsApp"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        <span className="text-[8px] mt-0.5 font-bold">Whats</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => onPrintWorkOrder(os)}
+                        className="flex flex-col items-center justify-center p-2 rounded-lg bg-blue-500/15 text-blue-400 active:scale-95 transition"
+                        title="Imprimir OS"
+                      >
+                        <Printer className="w-4 h-4" />
+                        <span className="text-[8px] mt-0.5 font-bold">Imprimir</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(os)}
+                        className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-800 text-slate-300 active:scale-95 transition"
+                        title="Editar OS"
+                      >
+                        <Edit className="w-4 h-4" />
+                        <span className="text-[8px] mt-0.5 font-bold">Editar</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-xs text-slate-500">
+                  Nenhuma ordem de serviço encontrada para este filtro.
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1871,16 +2014,6 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                               title="Enviar Ordem de Serviço pelo WhatsApp"
                             >
                               <MessageSquare className="app-action-icon" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                const url = getWorkOrderTrackingUrl(os, storeSettings);
-                                window.open(url, '_blank');
-                              }}
-                              className="p-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 transition"
-                              title="Abrir Link de Acompanhamento do Cliente em Nova Aba"
-                            >
-                              <ExternalLink className="app-action-icon" />
                             </button>
                             <button
                               onClick={() => onPrintWorkOrder(os)}
@@ -2423,29 +2556,29 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       {/* Modal Nova / Editar OS */}
       {isModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleCloseModal();
           }}
         >
           <div
-            className={`border rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl transition-all duration-300 ${
+            className={`border rounded-2xl w-full max-w-4xl max-h-[96vh] sm:max-h-[92vh] flex flex-col overflow-hidden shadow-2xl transition-all duration-300 ${
               isDimmedOSStatus(status)
                 ? 'bg-slate-950 border-zinc-800 brightness-[0.58]'
                 : 'bg-slate-900 border-slate-800'
             }`}
           >
             {/* Modal Header */}
-            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-blue-600/20 text-blue-400">
+            <div className="p-3 sm:p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 rounded-lg bg-blue-600/20 text-blue-400 shrink-0">
                   <Wrench className="w-5 h-5" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-white truncate">
                     {editingOS ? `Editar Ordem de Serviço #${editingOS.number}` : 'Nova Ordem de Serviço'}
                   </h3>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-[11px] sm:text-xs text-slate-400 truncate">
                     Cadastro de equipamento para manutenção, diagnóstico e peças
                   </p>
                 </div>
@@ -2453,7 +2586,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition"
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition shrink-0 ml-2"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2468,7 +2601,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 }
               }}
               autoComplete="off"
-              className="flex-1 overflow-y-auto p-6 space-y-6"
+              className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-6"
             >
               {/* Cliente */}
               <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 space-y-4">
@@ -3751,17 +3884,17 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               </div>
 
               {/* Botões do Modal */}
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 pt-2">
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition text-center"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition active:scale-[0.98]"
+                  className="w-full sm:w-auto px-6 py-2.5 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition active:scale-[0.98] text-center"
                 >
                   {editingOS ? 'Salvar Alterações da OS' : 'Gerar Ordem de Serviço'}
                 </button>
@@ -3774,20 +3907,20 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       {/* Modal de Visualização da Ordem de Serviço */}
       {viewingOS && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-xs overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) setViewingOS(null);
           }}
         >
           <div
-            className={`border rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 transition-all ${
+            className={`border rounded-2xl w-full max-w-4xl max-h-[96vh] sm:max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 transition-all ${
               isDimmedOSStatus(viewingOS.status)
                 ? 'bg-slate-950 border-zinc-800 brightness-[0.58]'
                 : 'bg-slate-900 border-slate-700/80'
             }`}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 px-6 border-b border-slate-800 bg-slate-950/70">
+            <div className="flex items-center justify-between p-3 sm:p-4 px-4 sm:px-6 border-b border-slate-800 bg-slate-950/70">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center font-bold">
                   <Wrench className="w-5 h-5" />
@@ -3876,61 +4009,6 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
             {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
-              {/* Card Destaque: Link de Acompanhamento Online para o Cliente */}
-              <div className="bg-gradient-to-r from-blue-950/40 via-slate-900 to-indigo-950/40 border border-blue-500/30 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg shadow-blue-950/20">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 shrink-0">
-                    <ExternalLink className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-xs">
-                        Link de Acompanhamento em Tempo Real do Cliente
-                      </span>
-                      <span className="px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 text-[10px] font-bold border border-blue-500/30 uppercase">
-                        Online
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Este é o link enviado pelo WhatsApp que o cliente abre diretamente no celular para ver o status e etapas.
-                    </p>
-                    <div className="text-[11px] text-blue-300 font-mono font-semibold mt-1 break-all select-all">
-                      {getWorkOrderTrackingUrl(viewingOS, storeSettings)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const url = getWorkOrderTrackingUrl(viewingOS, storeSettings);
-                      navigator.clipboard.writeText(url);
-                      setCopiedTrackLink(true);
-                      setTimeout(() => setCopiedTrackLink(false), 2000);
-                    }}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition"
-                    title="Copiar Link para a Área de Transferência"
-                  >
-                    {copiedTrackLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                    <span>{copiedTrackLink ? 'Copiado!' : 'Copiar Link'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const url = getWorkOrderTrackingUrl(viewingOS, storeSettings);
-                      window.open(url, '_blank');
-                    }}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-600/30"
-                    title="Abrir página de rastreamento do cliente agora"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    <span>Abrir Página do Cliente</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Card Destaque: Equipamento Entregue */}
               {viewingOS.status === 'entregue' && viewingOS.deliveredDate && (
                 <div className="bg-gradient-to-r from-emerald-950/60 via-slate-900 to-emerald-950/40 border border-emerald-500/40 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg shadow-emerald-950/20">

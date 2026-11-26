@@ -15,6 +15,7 @@ import {
   Package,
   Layers,
   ArrowRight,
+  ArrowLeft,
   Calendar,
   BarChart3,
   TrendingUp,
@@ -114,6 +115,8 @@ export const PosView: React.FC<PosViewProps> = ({
 }) => {
   // Aba ativa: 'pdv' (frente de caixa), 'historico' (vendas do dia), 'relatorio' (faturamento)
   const [activeTab, setActiveTab] = useState<'pdv' | 'historico' | 'relatorio'>('pdv');
+  // Visualização mobile do PDV: 'catalogo' (produtos) ou 'carrinho' (resumo e pagamento)
+  const [mobilePdvView, setMobilePdvView] = useState<'catalogo' | 'carrinho'>('catalogo');
 
   // Estados do PDV
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -1030,11 +1033,11 @@ export const PosView: React.FC<PosViewProps> = ({
   return (
     <div className="flex flex-col gap-4">
       {/* Abas Superiores de Navegação do PDV */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-2 gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 max-w-full">
           <button
             onClick={() => setActiveTab('pdv')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition shrink-0 ${
               activeTab === 'pdv'
                 ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-850'
@@ -1046,14 +1049,14 @@ export const PosView: React.FC<PosViewProps> = ({
 
           <button
             onClick={() => setActiveTab('historico')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition shrink-0 ${
               activeTab === 'historico'
                 ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-850'
             }`}
           >
             <Calendar className="w-4 h-4" />
-            <span>Histórico Diário de Vendas</span>
+            <span>Histórico Diário</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300">
               {sales.filter((s) => s.createdAt && s.createdAt.slice(0, 10) === todayStr).length} hoje
             </span>
@@ -1061,21 +1064,21 @@ export const PosView: React.FC<PosViewProps> = ({
 
           <button
             onClick={() => setActiveTab('relatorio')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition shrink-0 ${
               activeTab === 'relatorio'
                 ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-850'
             }`}
           >
             <BarChart3 className="w-4 h-4" />
-            <span>Relatório de Faturamento</span>
+            <span>Relatório Faturamento</span>
           </button>
         </div>
 
         {activeTab === 'relatorio' && (
           <button
             onClick={handlePrintReport}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition shrink-0 self-end sm:self-auto"
           >
             <Printer className="w-3.5 h-3.5 text-slate-300" />
             <span>Imprimir Relatório</span>
@@ -1085,11 +1088,40 @@ export const PosView: React.FC<PosViewProps> = ({
 
       {/* ABA 1: FRENTE DE CAIXA (PDV) */}
       {activeTab === 'pdv' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-170px)]">
-          {/* Coluna Esquerda: Catálogo e Busca de Produtos (2 colunas no desktop) */}
-          <div className="lg:col-span-2 flex flex-col gap-4 overflow-hidden">
-            {/* Barra de Pesquisa e Categorias */}
-            <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl space-y-3">
+        <div className="flex flex-col gap-3 min-h-[calc(100vh-170px)] lg:h-[calc(100vh-170px)]">
+          {/* Seletor Rápido Mobile: Alternar entre Catálogo e Carrinho */}
+          <div className="lg:hidden flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 shrink-0">
+            <button
+              type="button"
+              onClick={() => setMobilePdvView('catalogo')}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                mobilePdvView === 'catalogo'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Package className="w-3.5 h-3.5" />
+              <span>Catálogo Produtos</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobilePdvView('carrinho')}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                mobilePdvView === 'carrinho'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ShoppingCart className="w-3.5 h-3.5" />
+              <span>Carrinho ({cartItems.reduce((acc, it) => acc + it.quantity, 0)})</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 flex-1 overflow-hidden">
+            {/* Coluna Esquerda: Catálogo e Busca de Produtos (2 colunas no desktop) */}
+            <div className={`lg:col-span-2 flex-col gap-4 overflow-hidden relative ${mobilePdvView === 'carrinho' ? 'hidden lg:flex' : 'flex'}`}>
+              {/* Barra de Pesquisa e Categorias */}
+              <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl space-y-3">
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1200,10 +1232,44 @@ export const PosView: React.FC<PosViewProps> = ({
                 );
               })}
             </div>
+
+            {/* Barra Flutuante Mobile para Ir ao Carrinho */}
+            {cartItems.length > 0 && mobilePdvView === 'catalogo' && (
+              <div className="lg:hidden sticky bottom-0 z-20 bg-slate-900/95 border border-blue-500/40 p-3 rounded-xl shadow-2xl flex items-center justify-between gap-3 backdrop-blur-md">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-slate-400 font-medium truncate">
+                    {cartItems.reduce((acc, it) => acc + it.quantity, 0)} {cartItems.reduce((acc, it) => acc + it.quantity, 0) === 1 ? 'item' : 'itens'} no carrinho
+                  </p>
+                  <p className="text-sm font-extrabold text-emerald-400 truncate">
+                    Total: R$ {total.toFixed(2)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobilePdvView('carrinho')}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-xs shadow-md shadow-blue-600/30 flex items-center gap-1.5 active:scale-95 transition shrink-0"
+                >
+                  <span>Ver Carrinho</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Coluna Direita: Carrinho e Checkout (1 coluna no desktop) */}
-          <div className="flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div className={`flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden ${mobilePdvView === 'catalogo' ? 'hidden lg:flex' : 'flex'}`}>
+            {/* Botão Mobile para Voltar ao Catálogo */}
+            <div className="lg:hidden p-2.5 bg-slate-950/80 border-b border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setMobilePdvView('catalogo')}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-semibold transition"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Voltar e Continuar Comprando</span>
+              </button>
+            </div>
+
             {/* Cabeçalho do Carrinho */}
             <div className="p-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1514,7 +1580,7 @@ export const PosView: React.FC<PosViewProps> = ({
               <button
                 disabled={cartItems.length === 0}
                 onClick={openCheckout}
-                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:opacity-40 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition active:scale-[0.99] mt-2"
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:opacity-40 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition active:scale-[0.99] mt-2 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>FINALIZAR VENDA (F8)</span>
@@ -1522,6 +1588,7 @@ export const PosView: React.FC<PosViewProps> = ({
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {/* ABA 2: HISTÓRICO DIÁRIO DE VENDAS */}

@@ -422,9 +422,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </div>
           </div>
 
-          {/* Tabela de Produtos */}
+          {/* Tabela e Cards de Produtos */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
+            {/* Versão Tabela Desktop / Tablet */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-950/80 text-[11px] font-bold uppercase text-slate-400 border-b border-slate-800">
                   <tr>
@@ -525,6 +526,90 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Versão Otimizada em Cards para Celulares */}
+            <div className="md:hidden divide-y divide-slate-800/80">
+              {filteredProducts.length > 0 ? (
+                filteredProducts.map((p) => {
+                  const isLow = p.stock <= p.minStock;
+                  return (
+                    <div key={p.id} className="p-3 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center shrink-0">
+                            {p.imageUrl ? (
+                              <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <Package className="w-5 h-5 text-slate-600" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-white text-xs truncate" title={p.name}>
+                              {p.name}
+                            </h4>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              {p.brand || 'Sem marca'} • Cód: {p.code || 'S/N'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                            p.stock <= 0
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                              : isLow
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          }`}
+                        >
+                          {p.stock} {p.unit}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs pt-1">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Preço de Venda</span>
+                          <span className="font-extrabold text-emerald-400 text-sm">
+                            R$ {Number(p.sellingPrice).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditProductModal(p)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 active:scale-95 transition"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>Editar</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              requestAdminConfirmation({
+                                title: 'Excluir Produto',
+                                itemDescription: `Produto "${p.name}" (Código: ${p.code || 'S/N'})`,
+                                actionType: 'delete',
+                                onConfirm: async (adminPassword) => {
+                                  await onDeleteProduct(p.id, adminPassword);
+                                }
+                              });
+                            }}
+                            className="p-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 active:scale-95 transition"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="py-8 text-center text-xs text-slate-500">
+                  Nenhum produto cadastrado com esses filtros.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -594,9 +679,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </div>
           </div>
 
-          {/* Tabela de Serviços */}
+          {/* Tabela e Cards de Serviços */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
+            {/* Versão Tabela Desktop / Tablet */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-950/80 text-[11px] font-bold uppercase text-slate-400 border-b border-slate-800">
                   <tr>
@@ -680,6 +766,77 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Versão Otimizada em Cards para Celulares */}
+            <div className="md:hidden divide-y divide-slate-800/80">
+              {filteredServices.length > 0 ? (
+                filteredServices.map((s) => (
+                  <div key={s.id} className="p-3 space-y-2.5">
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-bold text-white text-xs truncate" title={s.name}>
+                          {s.name}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 truncate">
+                          Cód: {s.code || 'S/N'} • {s.category}
+                        </p>
+                      </div>
+                      <span className="font-extrabold text-emerald-400 text-sm shrink-0">
+                        R$ {Number(s.price).toFixed(2)}
+                      </span>
+                    </div>
+
+                    {s.description && (
+                      <p className="text-[10px] text-slate-400 line-clamp-2 bg-slate-950/40 p-2 rounded-lg border border-slate-800/60">
+                        {s.description}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                          NFS-e: {s.serviceCode || '14.01'}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          Garantia: {formatWarrantyLabel(s.defaultWarrantyDays)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditServiceModal(s)}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 active:scale-95 transition"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          <span>Editar</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            requestAdminConfirmation({
+                              title: 'Excluir Serviço',
+                              itemDescription: `Serviço "${s.name}" (Código: ${s.code || 'S/N'})`,
+                              actionType: 'delete',
+                              onConfirm: async (adminPassword) => {
+                                await onDeleteService(s.id, adminPassword);
+                              }
+                            });
+                          }}
+                          className="p-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 active:scale-95 transition"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-xs text-slate-500">
+                  Nenhum serviço cadastrado com esses filtros.
+                </div>
+              )}
             </div>
           </div>
         </div>

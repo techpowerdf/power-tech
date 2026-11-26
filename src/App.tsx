@@ -38,7 +38,6 @@ import { BackupView } from './views/BackupView';
 import { SettingsView } from './views/SettingsView';
 import { ExpensesView } from './views/ExpensesView';
 import { RevenueReportView } from './views/RevenueReportView';
-import { PublicTrackingView } from './views/PublicTrackingView';
 import { LoginView } from './views/LoginView';
 import { applyVisualCustomizations } from './utils/themeCustomizer';
 
@@ -46,27 +45,9 @@ export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [authChecking, setAuthChecking] = useState<boolean>(true);
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Detecção de link de acompanhamento público do cliente (?track= ou ?trackSale=)
-  const [publicTrackId, setPublicTrackId] = useState<string | null>(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('track');
-    } catch {
-      return null;
-    }
-  });
-
-  const [publicTrackSaleId, setPublicTrackSaleId] = useState<string | null>(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('trackSale');
-    } catch {
-      return null;
-    }
-  });
 
   // Entities State
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -229,12 +210,6 @@ export const App: React.FC = () => {
       setAuthToken(null);
     });
 
-    if (publicTrackId || publicTrackSaleId) {
-      setAuthChecking(false);
-      setLoading(false);
-      return;
-    }
-
     const token = getAuthToken();
     if (token) {
       api.getMe()
@@ -255,7 +230,7 @@ export const App: React.FC = () => {
       setAuthChecking(false);
       setLoading(false);
     }
-  }, [publicTrackId, publicTrackSaleId]);
+  }, []);
 
   const handleLogout = () => {
     api.logout();
@@ -515,34 +490,6 @@ export const App: React.FC = () => {
     setCurrentTab('despesas');
     setOpenCreateExpenseTrigger((prev) => prev + 1);
   };
-
-  // Tela pública de acompanhamento em tempo real para o cliente via WhatsApp
-  if (publicTrackId) {
-    return (
-      <PublicTrackingView
-        trackId={publicTrackId}
-        type="os"
-        onBackToSystem={() => {
-          window.history.replaceState({}, '', window.location.pathname);
-          setPublicTrackId(null);
-        }}
-      />
-    );
-  }
-
-  if (publicTrackSaleId) {
-    return (
-      <PublicTrackingView
-        trackId={publicTrackSaleId}
-        type="sale"
-        onBackToSystem={() => {
-          window.history.replaceState({}, '', window.location.pathname);
-          setPublicTrackSaleId(null);
-        }}
-      />
-    );
-  }
-
   // Verificando autenticação salva na inicialização
   if (authChecking) {
     return (
@@ -618,7 +565,7 @@ export const App: React.FC = () => {
       data-font-size-heading={fontSizeHeading}
       data-font-size-footer={fontSizeFooter}
     >
-      {/* Sidebar Lateral */}
+      {/* Sidebar Lateral (Desktop e Gaveta Mobile) */}
       <Sidebar
         currentTab={currentTab}
         onSelectTab={(tab) => {
@@ -635,10 +582,12 @@ export const App: React.FC = () => {
         onQuickBackupClick={handleQuickBackup}
         currentUser={currentUser}
         storeName={storeSettings?.tradeName || storeSettings?.storeName || 'Power Tech'}
+        isOpenMobile={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
       {/* Área Central Principal */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header Superior */}
         <Header
           currentTab={currentTab}
@@ -650,10 +599,11 @@ export const App: React.FC = () => {
           onToggleHideRevenue={toggleHideRevenue}
           currentUser={currentUser}
           onLogout={handleLogout}
+          onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
         />
 
         {/* Conteúdo Dinâmico das Telas */}
-        <main className="flex-1 overflow-y-auto p-6 bg-slate-950">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 bg-slate-950">
           {currentTab === 'dashboard' && dashboardData && (
             <DashboardView
               metrics={dashboardData.metrics}

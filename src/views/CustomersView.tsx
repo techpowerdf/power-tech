@@ -318,7 +318,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
+        {/* Visualização em Tabela para Desktop (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="bg-slate-950/80 text-[11px] font-bold uppercase text-slate-400 border-b border-slate-800">
               <tr>
@@ -423,6 +424,142 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Visualização em Cards para Mobile (< md) */}
+        <div className="md:hidden divide-y divide-slate-800/60 p-2 space-y-3">
+          {filteredCustomers.length === 0 ? (
+            <div className="text-center py-8 text-slate-500 text-xs">
+              Nenhum cliente encontrado.
+            </div>
+          ) : (
+            filteredCustomers.map((c) => {
+              const metrics = getCustomerMetrics(c);
+              return (
+                <div key={c.id} className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCustomerForHistory(c)}
+                      className="text-left font-bold text-white hover:text-blue-400 flex flex-col group transition flex-1 min-w-0"
+                    >
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-bold text-white group-hover:text-blue-400 group-hover:underline truncate">
+                          {c.name}
+                        </span>
+                        <History className="w-3.5 h-3.5 text-blue-400 opacity-80 shrink-0" />
+                      </div>
+                      {c.tradeName && (
+                        <span className="text-[11px] text-slate-400 font-normal truncate block">
+                          {c.tradeName}
+                        </span>
+                      )}
+                    </button>
+                    {c.document && (
+                      <span className="font-mono text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800 shrink-0">
+                        {c.document}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Badges de Histórico */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {metrics.osCount > 0 && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                        {metrics.osCount} {metrics.osCount === 1 ? 'OS' : 'OSs'}
+                      </span>
+                    )}
+                    {metrics.salesCount > 0 && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                        {metrics.salesCount} {metrics.salesCount === 1 ? 'Venda' : 'Vendas'}
+                      </span>
+                    )}
+                    {metrics.osCount === 0 && metrics.salesCount === 0 && (
+                      <span className="text-[10px] text-slate-500">Sem histórico</span>
+                    )}
+                  </div>
+
+                  {/* Informações de Contato e Endereço */}
+                  <div className="space-y-1.5 text-xs text-slate-300">
+                    {(c.phone || c.whatsapp) && (
+                      <div className="flex items-center gap-1.5 text-slate-300">
+                        <Phone className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span>{c.phone || c.whatsapp}</span>
+                      </div>
+                    )}
+                    {c.email && (
+                      <div className="flex items-center gap-1.5 text-slate-400 text-[11px] truncate">
+                        <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span className="truncate">{c.email}</span>
+                      </div>
+                    )}
+                    {c.street && (
+                      <div className="flex items-start gap-1.5 text-slate-400 text-[11px]">
+                        <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+                        <span className="line-clamp-2">
+                          {c.street}, {c.number || 'S/N'} {c.neighborhood ? `- ${c.neighborhood}` : ''} {c.city ? `(${c.city}/${c.state})` : ''}
+                        </span>
+                      </div>
+                    )}
+                    {c.notes && (
+                      <p className="text-[10px] text-slate-500 italic line-clamp-2 bg-slate-900/60 p-1.5 rounded">
+                        {c.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Botões de Ação Touch-friendly */}
+                  <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-800/80">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCustomerForHistory(c)}
+                      className="flex items-center justify-center gap-1 py-2 px-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 font-semibold text-xs transition"
+                      title="Histórico"
+                    >
+                      <History className="w-3.5 h-3.5" />
+                      <span className="hidden min-[380px]:inline">Histórico</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openWhatsApp(c)}
+                      className="flex items-center justify-center gap-1 py-2 px-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 font-semibold text-xs transition"
+                      title="WhatsApp"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span className="hidden min-[380px]:inline">Whats</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(c)}
+                      className="flex items-center justify-center gap-1 py-2 px-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
+                      title="Editar"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      <span className="hidden min-[380px]:inline">Editar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        requestAdminConfirmation({
+                          title: 'Excluir Cliente',
+                          itemDescription: `Cliente "${c.name}" (${c.document || 'Sem documento'})`,
+                          actionType: 'delete',
+                          onConfirm: async (adminPassword) => {
+                            await onDeleteCustomer(c.id, adminPassword);
+                          }
+                        });
+                      }}
+                      className="flex items-center justify-center gap-1 py-2 px-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 font-semibold text-xs transition"
+                      title="Excluir"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span className="hidden min-[380px]:inline">Excluir</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -536,7 +673,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                     <div>
                       <label className="text-[11px] text-slate-400 block mb-1">Inscrição Estadual (IE)</label>
                       <input
@@ -660,7 +797,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   Endereço Cadastral
                 </span>
 
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 sm:gap-3">
                   <div>
                     <label className="text-[11px] text-slate-400 block mb-1">CEP</label>
                     <input
@@ -671,7 +808,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       placeholder="00000-000"
                     />
                   </div>
-                  <div className="col-span-3">
+                  <div className="sm:col-span-3">
                     <label className="text-[11px] text-slate-400 block mb-1">Rua / Logradouro</label>
                     <input
                       type="text"
@@ -683,7 +820,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                   <div>
                     <label className="text-[11px] text-slate-400 block mb-1">Número</label>
                     <input
@@ -716,8 +853,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+                  <div className="sm:col-span-2">
                     <label className="text-[11px] text-slate-400 block mb-1">Cidade / Município</label>
                     <input
                       type="text"
@@ -752,17 +889,17 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800 shrink-0">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2 border-t border-slate-800 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
+                  className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition text-center"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg shadow-md shadow-blue-600/30 transition"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg shadow-md shadow-blue-600/30 transition text-center"
                 >
                   Salvar Cliente
                 </button>

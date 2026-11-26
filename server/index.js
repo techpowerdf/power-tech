@@ -30,11 +30,25 @@ app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
+// Inicialização de segurança pós-carregamento do banco
+let isSecurityInitialized = false;
+
+async function ensureAppInitialized() {
+  const db = await ensureDatabaseLoaded();
+  if (!isSecurityInitialized && db) {
+    isSecurityInitialized = true;
+    ensureDefaultAdminUser(db);
+    ensureTokensForExistingRecords(db);
+    syncCustomersAndHistory(db);
+  }
+  return db;
+}
+
 // Middleware global para garantir carregamento do Supabase antes de processar qualquer requisição da API
 app.use(async (req, res, next) => {
   if (req.path.startsWith('/api')) {
     try {
-      await ensureDatabaseLoaded();
+      await ensureAppInitialized();
     } catch (err) {
       console.error('[API Middleware DB Load Error]', err.message);
       return res.status(503).json({ error: 'Falha ao conectar com o banco de dados em nuvem. Tente novamente.' });
@@ -43,22 +57,17 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// Inicia verificação diária de backup ao subir o servidor (apenas ambiente local Windows, desativado na Vercel)
+if (!process.env.VERCEL) {
+  setTimeout(() => {
+    checkDailyBackup();
+  }, 2000);
 
-// Inicialização de segurança: garante usuário admin e gera tokens aleatórios para registros existentes
-const initialDb = getDatabase();
-ensureDefaultAdminUser(initialDb);
-ensureTokensForExistingRecords(initialDb);
-syncCustomersAndHistory(initialDb);
-
-// Inicia verificação diária de backup ao subir o servidor
-setTimeout(() => {
-  checkDailyBackup();
-}, 2000);
-
-// Agendador simples a cada hora para garantir o backup diário caso o sistema fique aberto
-setInterval(() => {
-  checkDailyBackup();
-}, 1000 * 60 * 60);
+  // Agendador simples a cada hora para garantir o backup diário caso o sistema fique aberto
+  setInterval(() => {
+    checkDailyBackup();
+  }, 1000 * 60 * 60);
+}
 
 const osNode = require('os');
 let isPort80Active = false;
@@ -657,50 +666,7 @@ app.delete('/api/users/:id', requireAuth, requireAdmin, requireAdminPassword, as
 // ACOMPANHAMENTO PÚBLICO SEGURO (CLIENTE)
 // ==========================================
 app.get('/api/public/work-orders/track/:token', (req, res) => {
-  const db = getDatabase();
-  const token = String(req.params.token).trim();
-
-  // Bloqueia tentativa de adivinhar número sequencial de OS (IDOR)
-  if (/^\d+$/.test(token)) {
-    return res.status(403).json({
-      error: 'Acesso bloqueado por segurança. O acompanhamento público de Ordens de Serviço exige o link oficial com token criptográfico.',
-      code: 'TOKEN_REQUIRED'
-    });
-  }
-
-  if (!token || token.length < 8) {
-    return res.status(400).json({ error: 'Token de acompanhamento inválido.' });
-  }
-
-  const os = (db.workOrders || []).find((o) => o.trackingToken === token);
-  if (!os || os.status === 'cancelada') {
-    return res.status(404).json({
-      error: 'Essa ordem de serviço não existe ou o link expirou.',
-      inactive: true
-    });
-  }
-
-  const store = db.storeSettings || {};
-  const publicStore = {
-    storeName: store.storeName || 'Power Tech - Assistência Técnica',
-    tradeName: store.tradeName || 'Power Tech',
-    cnpj: store.cnpj || '',
-    phone: store.phone || '',
-    whatsapp: store.whatsapp || '',
-    street: store.street || '',
-    number: store.number || '',
-    neighborhood: store.neighborhood || '',
-    city: store.city || '',
-    state: store.state || '',
-    cep: store.cep || '',
-    pixKey: store.pixKey || '',
-    warrantyTerms: store.warrantyTerms || ''
-  };
-
-  res.json({
-    workOrder: sanitizePublicWorkOrder(os, publicStore),
-    store: publicStore
-  });
+  res.status(404).json({ error: 'Acompanhamento web desativado. Solicite a via em PDF diretamente pelo WhatsApp da loja.' });
 });
 
 // Modelo de visualização e impressão A4 da Ordem de Serviço
@@ -982,48 +948,7 @@ app.get('/api/public/work-orders/:token/pdf', async (req, res) => {
 });
 
 app.get('/api/public/sales/receipt/:token', (req, res) => {
-  const db = getDatabase();
-  const token = String(req.params.token).trim();
-
-  // Bloqueia tentativa de adivinhar número sequencial ou id simples de venda (IDOR)
-  if (/^\d+$/.test(token)) {
-    return res.status(403).json({
-      error: 'Acesso bloqueado por segurança. O comprovante de venda exige o link oficial com token seguro.',
-      code: 'TOKEN_REQUIRED'
-    });
-  }
-
-  if (!token || token.length < 8) {
-    return res.status(400).json({ error: 'Token de recibo inválido.' });
-  }
-
-  const sale = (db.sales || []).find((s) => s.receiptToken === token);
-  if (!sale) {
-    return res.status(404).json({
-      error: 'Esse comprovante de venda não existe ou o link expirou.',
-      inactive: true
-    });
-  }
-
-  const store = db.storeSettings || {};
-  const publicStore = {
-    storeName: store.storeName || 'Power Tech - Assistência Técnica',
-    tradeName: store.tradeName || 'Power Tech',
-    phone: store.phone || '',
-    whatsapp: store.whatsapp || '',
-    street: store.street || '',
-    number: store.number || '',
-    neighborhood: store.neighborhood || '',
-    city: store.city || '',
-    state: store.state || '',
-    pixKey: store.pixKey || '',
-    warrantyTerms: store.warrantyTerms || ''
-  };
-
-  res.json({
-    sale: sanitizePublicSale(sale, publicStore),
-    store: publicStore
-  });
+  res.status(404).json({ error: 'Acompanhamento web desativado. Solicite a via em PDF diretamente pelo WhatsApp da loja.' });
 });
 
 app.get('/api/public/sales/receipt/:token/imprimir', (req, res) => {
@@ -3243,14 +3168,13 @@ app.get('/api/settings', requireAuth, (req, res) => {
   const db = getDatabase();
   const settings = db.storeSettings || {};
   const localIp = getLocalIpAddress();
-  const currentPublicUrl = getPublicUrl();
   res.json({
     ...settings,
-    publicTrackingUrl: currentPublicUrl || settings.publicTrackingUrl || '',
-    tunnelActive: Boolean(currentPublicUrl),
+    publicTrackingUrl: '',
+    tunnelActive: false,
     detectedLocalIp: localIp,
     isPort80Active,
-    detectedLocalUrl: currentPublicUrl || getDetectedLocalUrl()
+    detectedLocalUrl: getDetectedLocalUrl()
   });
 });
 
@@ -3264,14 +3188,13 @@ app.put('/api/settings', requireAuth, async (req, res) => {
   res.json(db.storeSettings);
 });
 
-// Endpoints do Túnel Público Cloudflare
+// Endpoints do Túnel Público Cloudflare (Desativados)
 app.get('/api/tunnel/status', requireAuth, (req, res) => {
-  res.json(getStatus());
+  res.json({ active: false, provider: 'Desativado' });
 });
 
 app.post('/api/tunnel/restart', requireAuth, (req, res) => {
-  restartTunnel(PORT);
-  res.json({ message: 'Reiniciando túnel Cloudflare...', status: getStatus() });
+  res.json({ message: 'Túnel Cloudflare desativado permanentemente.', status: { active: false } });
 });
 
 // Disparo nativo via WhatsApp Desktop / WhatsApp Business no Windows (sem navegador e com envio automático)
@@ -3398,22 +3321,25 @@ if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   app.use((req, res, next) => {
     if (req.path.startsWith('/api')) return next();
-    res.sendFile(path.join(distPath, 'index.html'));
+    const indexPath = path.join(distPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath, (err) => {
+        if (err && !res.headersSent) next(err);
+      });
+    } else {
+      next();
+    }
   });
 }
 
 // Inicia servidor na porta principal (4567) caso não esteja executando no ambiente serverless da Vercel
 if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
+  app.listen(PORT, async () => {
     console.log(`[InfoTech API] Servidor rodando com sucesso em http://127.0.0.1:${PORT}`);
-    // Inicia túnel Cloudflare apenas se habilitado ou em desenvolvimento local Windows
-    const shouldStartTunnel = process.env.ENABLE_CLOUDFLARE_TUNNEL === 'true' || 
-      (process.env.NODE_ENV !== 'production' && process.platform === 'win32' && process.env.DISABLE_TUNNEL !== 'true');
-
-    if (shouldStartTunnel) {
-      startTunnel(PORT);
-    } else {
-      console.log('[Cloudflare Tunnel] Túnel temporário desativado (Ambiente de Produção / VPS).');
+    try {
+      await ensureAppInitialized();
+    } catch (e) {
+      console.warn('[InfoTech API] Inicialização em segundo plano:', e.message);
     }
   });
 
