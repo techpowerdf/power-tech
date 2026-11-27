@@ -76,7 +76,8 @@ function sanitizeFileName(fileName) {
 
 function getOsFolder(workOrderId) {
   const str = String(workOrderId || '').trim();
-  return str.startsWith('os-') ? str : `os-${str}`;
+  const safeId = str.replace(/[^a-zA-Z0-9_-]/g, '');
+  return safeId.startsWith('os-') ? safeId : `os-${safeId}`;
 }
 
 /**
@@ -89,11 +90,18 @@ async function savePhotoFile({ workOrderId, stage, fileName, mimeType, buffer, u
 
   const normalizedStage = VALID_STAGES.includes(stage) ? stage : 'entrada';
   const cleanName = sanitizeFileName(fileName);
-  const ext = path.extname(cleanName) || '.jpg';
+  const rawExt = (path.extname(cleanName) || '.jpg').toLowerCase();
+  const safeExt = rawExt === '.jpeg' ? '.jpg' : rawExt;
   const photoId = `photo-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
-  const storageFileName = `${normalizedStage}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}${ext}`;
+  const storageFileName = `${normalizedStage}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}${safeExt}`;
   const osFolder = getOsFolder(workOrderId);
-  const storagePath = `${osFolder}/${storageFileName}`;
+  
+  // Caminho estritamente relativo, padronizado com forward slashes, sem barra no início e sem barras duplas
+  const storagePath = `${osFolder}/${storageFileName}`
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+/g, '/')
+    .trim();
   const effectiveMime = mimeType || 'image/jpeg';
 
   let savedInCloud = false;
@@ -169,9 +177,15 @@ async function resolvePhotoUrl(photo, reqBaseUrl = '') {
       throw new Error('Supabase Storage não inicializado no ambiente de produção.');
     }
 
+    const cleanPath = String(photo.storagePath || '')
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, '')
+      .replace(/\/+/g, '/')
+      .trim();
+
     const { data, error } = await supabase.storage
       .from(BUCKET_NAME)
-      .createSignedUrl(photo.storagePath, 3600); // 1 hora de validade temporária
+      .createSignedUrl(cleanPath, 3600); // 1 hora de validade temporária
 
     if (error || !data || !data.signedUrl) {
       throw new Error(`Falha ao gerar URL temporária assinada no Supabase Storage: ${error ? error.message : 'URL não retornada'}`);
@@ -191,12 +205,18 @@ async function resolvePhotoUrl(photo, reqBaseUrl = '') {
 async function deletePhotoFile(photoOrTarget) {
   if (!photoOrTarget) return { success: false, error: 'Identificador do arquivo não fornecido.' };
 
-  const storagePath = typeof photoOrTarget === 'string' ? photoOrTarget : photoOrTarget?.storagePath;
-  const workOrderId = photoOrTarget?.workOrderId || (storagePath ? storagePath.split('/')[0] : null);
-
-  if (!storagePath) {
+  const rawStoragePath = typeof photoOrTarget === 'string' ? photoOrTarget : photoOrTarget?.storagePath;
+  if (!rawStoragePath) {
     return { success: false, error: 'Caminho de armazenamento (storagePath) não informado.' };
   }
+
+  const storagePath = String(rawStoragePath)
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+/g, '/')
+    .trim();
+
+  const workOrderId = photoOrTarget?.workOrderId || (storagePath ? storagePath.split('/')[0] : null);
 
   // Intercepta simulação de falha controlada (para testes automatizados)
   if (simulatedStorageFailure) {

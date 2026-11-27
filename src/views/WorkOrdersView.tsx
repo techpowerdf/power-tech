@@ -33,9 +33,11 @@ import {
   CreditCard,
   History,
   BadgeDollarSign,
-  Camera
+  Camera,
+  Image as ImageIcon
 } from 'lucide-react';
-import { WorkOrder, WorkOrderStatus, Customer, Product, ServiceItem, StoreSettings, Sale, Seller } from '../types';
+import { WorkOrder, WorkOrderStatus, Customer, Product, ServiceItem, StoreSettings, Sale, Seller, WorkOrderPhotoStage } from '../types';
+import { compressImage, formatFileSize } from '../utils/imageCompressor';
 import {
   openWhatsAppWithText,
   formatWorkOrderWhatsAppMessage,
@@ -80,7 +82,7 @@ interface WorkOrdersViewProps {
   sellers?: Seller[];
   storeSettings?: StoreSettings;
   canDelete?: boolean;
-  onSaveWorkOrder: (os: Partial<WorkOrder>) => Promise<void>;
+  onSaveWorkOrder: (os: Partial<WorkOrder>) => Promise<WorkOrder | void>;
   onDeleteWorkOrder: (id: string, adminPassword?: string) => Promise<void>;
   onPrintWorkOrder: (os: WorkOrder, copiesMode?: 'inteira' | 'ambas' | 'cliente') => void;
   onSaveProduct?: (product: Partial<Product>) => Promise<void>;
@@ -90,6 +92,18 @@ interface WorkOrdersViewProps {
   onOpenGeneralReport?: () => void;
   hideRevenue?: boolean;
   onToggleHideRevenue?: () => void;
+}
+
+export interface StagedPhoto {
+  id: string;
+  file: File;
+  previewUrl: string;
+  fileName: string;
+  stage: WorkOrderPhotoStage;
+  base64Data: string;
+  mimeType: string;
+  originalSizeBytes: number;
+  compressedSizeBytes: number;
 }
 
 export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
@@ -120,6 +134,19 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const [osForAddingItems, setOsForAddingItems] = useState<WorkOrder | null>(null);
   const [whatsAppModalOS, setWhatsAppModalOS] = useState<WorkOrder | null>(null);
   const [whatsAppFeedback, setWhatsAppFeedback] = useState<{ osNumber: number | string; message: string } | null>(null);
+
+  // Fotografias em estágio (capturadas antes do salvamento da OS)
+  const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>([]);
+  const [isProcessingPhotos, setIsProcessingPhotos] = useState<boolean>(false);
+  const [photoProcessingMessage, setPhotoProcessingMessage] = useState<string>('');
+  const [isUploadingStagedPhotos, setIsUploadingStagedPhotos] = useState<boolean>(false);
+  const [stagedUploadProgressText, setStagedUploadProgressText] = useState<string>('');
+  const [stagedPhotoUploadError, setStagedPhotoUploadError] = useState<string | null>(null);
+  const [createdOSPendingPhotos, setCreatedOSPendingPhotos] = useState<{ id: string; number: number } | null>(null);
+
+  // Inputs nativos de câmera e galeria do formulário de OS
+  const formCameraInputRef = React.useRef<HTMLInputElement>(null);
+  const formGalleryInputRef = React.useRef<HTMLInputElement>(null);
 
   // Modal de Histórico de Cliente
   const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
@@ -341,6 +368,13 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     setCustomItemCategory('servico');
     setCustomItemWarrantyDays(90);
     setCustomItemSaveToSystem(false);
+    setStagedPhotos([]);
+    setIsProcessingPhotos(false);
+    setPhotoProcessingMessage('');
+    setIsUploadingStagedPhotos(false);
+    setStagedUploadProgressText('');
+    setStagedPhotoUploadError(null);
+    setCreatedOSPendingPhotos(null);
     setIsModalOpen(true);
   };
 
@@ -351,7 +385,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       model.trim() ||
       reportedIssue.trim() ||
       additionalInfo.trim() ||
-      items.length > 0;
+      items.length > 0 ||
+      stagedPhotos.length > 0;
 
     if (hasUnsavedChanges) {
       if (
@@ -359,9 +394,15 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
           'Deseja fechar a janela? As alterações preenchidas nesta Ordem de Serviço serão descartadas.'
         )
       ) {
+        setStagedPhotos([]);
+        setStagedPhotoUploadError(null);
+        setCreatedOSPendingPhotos(null);
         setIsModalOpen(false);
       }
     } else {
+      setStagedPhotos([]);
+      setStagedPhotoUploadError(null);
+      setCreatedOSPendingPhotos(null);
       setIsModalOpen(false);
     }
   };
@@ -460,7 +501,106 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     setSelectedProductId('');
     setItemQuantity(1);
     setItemUnitPrice('');
+    setStagedPhotos([]);
+    setIsProcessingPhotos(false);
+    setPhotoProcessingMessage('');
+    setIsUploadingStagedPhotos(false);
+    setStagedUploadProgressText('');
+    setStagedPhotoUploadError(null);
+    setCreatedOSPendingPhotos(null);
     setIsModalOpen(true);
+  };
+
+  // Processamento e compressão de fotos selecionadas para inclusão em estágio
+  const handleStagedPhotosSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setIsProcessingPhotos(true);
+    setStagedPhotoUploadError(null);
+
+    try {
+      const newStaged: StagedPhoto[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith('image/')) continue;
+
+        setPhotoProcessingMessage(`Otimizando foto ${i + 1} de ${files.length}...`);
+        const compressed = await compressImage(file, file.name, {
+          maxWidth: 1600,
+          maxHeight: 1600,
+          quality: 0.82
+        });
+
+        newStaged.push({
+          id: `staged-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          file,
+          previewUrl: compressed.base64Data,
+          fileName: compressed.fileName,
+          stage: 'entrada',
+          base64Data: compressed.base64Data,
+          mimeType: compressed.mimeType || 'image/jpeg',
+          originalSizeBytes: compressed.originalSizeBytes,
+          compressedSizeBytes: compressed.compressedSizeBytes
+        });
+      }
+
+      setStagedPhotos((prev) => [...prev, ...newStaged]);
+    } catch (err: any) {
+      console.error('Erro ao comprimir imagem:', err);
+      alert('Não foi possível processar algumas imagens selecionadas. Tente novamente.');
+    } finally {
+      setIsProcessingPhotos(false);
+      setPhotoProcessingMessage('');
+      if (e.target) {
+        e.target.value = '';
+      }
+    }
+  };
+
+  const handleRemoveStagedPhoto = (id: string) => {
+    setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  // Reenvio das fotos que falharam pós-salvamento da OS
+  const handleRetryUploadFailedPhotos = async () => {
+    const targetOsId = createdOSPendingPhotos?.id || editingOS?.id;
+    if (!targetOsId || stagedPhotos.length === 0) return;
+
+    setIsUploadingStagedPhotos(true);
+    setStagedPhotoUploadError(null);
+    const failedUploads: { photo: StagedPhoto; error: string }[] = [];
+    const successfulIds: string[] = [];
+
+    for (let i = 0; i < stagedPhotos.length; i++) {
+      const p = stagedPhotos[i];
+      setStagedUploadProgressText(`Reenviando fotografia ${i + 1} de ${stagedPhotos.length}...`);
+      try {
+        await api.uploadWorkOrderPhoto(targetOsId, {
+          stage: p.stage,
+          fileName: p.fileName,
+          base64Data: p.base64Data,
+          mimeType: p.mimeType
+        });
+        successfulIds.push(p.id);
+      } catch (uploadErr: any) {
+        failedUploads.push({ photo: p, error: uploadErr.message || 'Erro no envio' });
+      }
+    }
+
+    setIsUploadingStagedPhotos(false);
+    setStagedUploadProgressText('');
+
+    if (failedUploads.length === 0) {
+      setStagedPhotos([]);
+      setCreatedOSPendingPhotos(null);
+      setStagedPhotoUploadError(null);
+      alert('Todas as fotografias pendentes foram enviadas com sucesso!');
+      setIsModalOpen(false);
+    } else {
+      setStagedPhotos((prev) => prev.filter((p) => !successfulIds.includes(p.id)));
+      setStagedPhotoUploadError(`Ainda restam ${failedUploads.length} foto(s) com falha no envio: ${failedUploads[0].error}`);
+    }
   };
 
   const handleOpenHistoryForOS = (os: WorkOrder) => {
@@ -885,8 +1025,71 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
     const isNowReady = payload.status === 'concluida' && (!editingOS || editingOS.status !== 'concluida');
     const isNowDelivered = payload.status === 'entregue' && (!editingOS || editingOS.status !== 'entregue');
-    await onSaveWorkOrder(payload);
-    setIsModalOpen(false);
+
+    let savedOS: WorkOrder | null = null;
+    try {
+      const res = await onSaveWorkOrder(payload);
+      savedOS = (res as WorkOrder) || null;
+    } catch (saveErr: any) {
+      alert(`Erro ao salvar a Ordem de Serviço: ${saveErr.message || 'Falha de comunicação com o servidor'}`);
+      return;
+    }
+
+    const targetOsId = savedOS?.id || editingOS?.id;
+
+    // Se houver fotografias em estágio anexadas na abertura/edição
+    if (targetOsId && stagedPhotos.length > 0) {
+      setIsUploadingStagedPhotos(true);
+      const failedUploads: { photo: StagedPhoto; error: string }[] = [];
+      const successfulIds: string[] = [];
+
+      for (let i = 0; i < stagedPhotos.length; i++) {
+        const p = stagedPhotos[i];
+        setStagedUploadProgressText(`Enviando fotografia ${i + 1} de ${stagedPhotos.length} para o armazenamento seguro...`);
+        try {
+          await api.uploadWorkOrderPhoto(targetOsId, {
+            stage: p.stage,
+            fileName: p.fileName,
+            base64Data: p.base64Data,
+            mimeType: p.mimeType
+          });
+          successfulIds.push(p.id);
+        } catch (uploadErr: any) {
+          console.error(`Falha no upload da foto ${p.fileName}:`, uploadErr);
+          failedUploads.push({
+            photo: p,
+            error: uploadErr.message || 'Erro no envio'
+          });
+        }
+      }
+
+      setIsUploadingStagedPhotos(false);
+      setStagedUploadProgressText('');
+
+      if (failedUploads.length === 0) {
+        setStagedPhotos([]);
+        setStagedPhotoUploadError(null);
+        setCreatedOSPendingPhotos(null);
+        setIsModalOpen(false);
+      } else {
+        setStagedPhotos((prev) => prev.filter((p) => !successfulIds.includes(p.id)));
+        const firstErr = failedUploads[0].error;
+        const osNumText = savedOS?.number ? `#${savedOS.number}` : (editingOS?.number ? `#${editingOS.number}` : '');
+        setCreatedOSPendingPhotos(savedOS ? { id: savedOS.id, number: savedOS.number } : (editingOS ? { id: editingOS.id, number: editingOS.number } : null));
+        setStagedPhotoUploadError(`A Ordem de Serviço ${osNumText} foi salva com sucesso, mas falhou o envio de ${failedUploads.length} foto(s): ${firstErr}`);
+        alert(
+          `A Ordem de Serviço ${osNumText} foi salva com sucesso no sistema!\n\n` +
+          `No entanto, o envio de ${failedUploads.length} fotografia(s) falhou: ${firstErr}.\n\n` +
+          `As fotos não enviadas permanecem no formulário. Você pode tentar reenviá-las agora ou gerenciá-las depois na galeria da OS.`
+        );
+        return;
+      }
+    } else {
+      setStagedPhotos([]);
+      setStagedPhotoUploadError(null);
+      setCreatedOSPendingPhotos(null);
+      setIsModalOpen(false);
+    }
 
     // Se o status foi alterado para concluída ("pronta retirada"), abre modal de envio do WhatsApp com PDF
     const shouldNoticeReady = storeSettings?.osReadyMessageEnabled ?? true;
@@ -3247,6 +3450,169 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Fotografias de Entrada do Equipamento */}
+                <div className="pt-3 border-t border-slate-800 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Camera className="w-4 h-4 text-sky-400" />
+                        <span className="text-xs font-bold text-slate-200 uppercase tracking-wide">
+                          Fotografias do Equipamento
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-500/15 text-sky-400 border border-sky-500/30">
+                          Entrada
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Tire fotos do estado físico do aparelho (avarias, riscos, tela, número de série).
+                      </p>
+                    </div>
+
+                    {/* Botões de Ação para Captura */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={formCameraInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleStagedPhotosSelected}
+                        className="hidden"
+                      />
+                      <input
+                        ref={formGalleryInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleStagedPhotosSelected}
+                        className="hidden"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => formCameraInputRef.current?.click()}
+                        disabled={isProcessingPhotos || isUploadingStagedPhotos}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-sm transition active:scale-[0.98]"
+                        title="Tirar foto diretamente com a câmera do celular"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>Tirar Foto</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => formGalleryInputRef.current?.click()}
+                        disabled={isProcessingPhotos || isUploadingStagedPhotos}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition active:scale-[0.98]"
+                        title="Selecionar fotos da galeria ou computador"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Galeria</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Estado de Processamento / Compressão */}
+                  {isProcessingPhotos && (
+                    <div className="flex items-center gap-2 text-xs text-sky-400 bg-sky-950/40 border border-sky-800/60 p-2.5 rounded-lg">
+                      <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
+                      <span>{photoProcessingMessage || 'Otimizando imagens...'}</span>
+                    </div>
+                  )}
+
+                  {/* Alerta de erro com opção de retry caso tenha falhado o upload pós-criação */}
+                  {stagedPhotoUploadError && (
+                    <div className="p-3 rounded-lg bg-amber-950/50 border border-amber-800/80 text-xs text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <span>{stagedPhotoUploadError}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {createdOSPendingPhotos && (
+                          <button
+                            type="button"
+                            onClick={handleRetryUploadFailedPhotos}
+                            disabled={isUploadingStagedPhotos}
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold rounded transition"
+                          >
+                            Tentar Reenviar Fotos
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStagedPhotoUploadError(null);
+                            setCreatedOSPendingPhotos(null);
+                            setStagedPhotos([]);
+                            setIsModalOpen(false);
+                          }}
+                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] rounded transition"
+                        >
+                          Concluir sem Fotos
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Grade de Pré-visualização das Imagens em Estágio */}
+                  {stagedPhotos.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>{stagedPhotos.length} foto(s) selecionada(s) para vinculação na OS:</span>
+                        <button
+                          type="button"
+                          onClick={() => setStagedPhotos([])}
+                          className="text-red-400 hover:text-red-300 transition text-[11px] underline"
+                        >
+                          Remover todas
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                        {stagedPhotos.map((photo, index) => (
+                          <div
+                            key={photo.id}
+                            className="group relative bg-slate-900 border border-slate-800 rounded-lg overflow-hidden shadow-sm aspect-square flex flex-col justify-between"
+                          >
+                            <img
+                              src={photo.previewUrl}
+                              alt={photo.fileName}
+                              className="w-full h-full object-cover"
+                            />
+                            {/* Overlay escurecido */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/50 opacity-90 transition-opacity" />
+
+                            {/* Badge Entrada no topo */}
+                            <div className="absolute top-1.5 left-1.5">
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-500/80 text-white">
+                                Entrada #{index + 1}
+                              </span>
+                            </div>
+
+                            {/* Botão Remover (X) */}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveStagedPhoto(photo.id)}
+                              className="absolute top-1.5 right-1.5 p-1 bg-red-600/90 hover:bg-red-500 text-white rounded-full transition shadow-md"
+                              title="Remover foto antes de salvar"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+
+                            {/* Tamanho comprimido no rodapé */}
+                            <div className="absolute bottom-1 left-1.5 right-1.5 flex items-center justify-between text-[9px] text-slate-300 truncate">
+                              <span className="truncate max-w-[70%]">{photo.fileName}</span>
+                              <span className="font-mono text-emerald-400 font-semibold">{formatFileSize(photo.compressedSizeBytes)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-slate-900/50 border border-dashed border-slate-800 rounded-lg text-center text-xs text-slate-500">
+                      Nenhuma foto anexada. Use os botões acima para fotografar o aparelho na entrada.
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Defeito e Laudo Técnico */}
@@ -3924,15 +4290,26 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition text-center"
+                  disabled={isUploadingStagedPhotos}
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition text-center disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="w-full sm:w-auto px-6 py-2.5 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition active:scale-[0.98] text-center"
+                  disabled={isUploadingStagedPhotos || isProcessingPhotos}
+                  className="w-full sm:w-auto px-6 py-2.5 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition active:scale-[0.98] text-center flex items-center justify-center gap-2"
                 >
-                  {editingOS ? 'Salvar Alterações da OS' : 'Gerar Ordem de Serviço'}
+                  {isUploadingStagedPhotos ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>{stagedUploadProgressText || 'Enviando fotos...'}</span>
+                    </>
+                  ) : editingOS ? (
+                    'Salvar Alterações da OS'
+                  ) : (
+                    'Gerar Ordem de Serviço'
+                  )}
                 </button>
               </div>
             </form>

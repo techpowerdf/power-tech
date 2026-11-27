@@ -20,18 +20,27 @@ function getPostgresUrl() {
 }
 
 function getSupabaseUrl() {
-  return (
+  const raw = (
     process.env.SUPABASE_URL ||
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL ||
-    null
-  );
+    ''
+  ).trim();
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    // Retorna a origem limpa (ex: https://xyz.supabase.co), eliminando qualquer barra final ou subcaminhos como /rest/v1
+    return parsed.origin;
+  } catch (e) {
+    return raw.replace(/\/+$/, '');
+  }
 }
 
 function getSupabaseKey() {
   // Aceita exclusivamente a chave administrativa de serviço (SUPABASE_SERVICE_ROLE_KEY).
   // NUNCA aceita chaves públicas ou anônimas (SUPABASE_ANON_KEY).
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || null;
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  return key || null;
 }
 
 function isSupabaseConfigured() {
@@ -338,5 +347,7 @@ module.exports = {
   saveToSupabase,
   getCloudVersion,
   getPgPool,
-  getSupabaseClient
+  getSupabaseClient,
+  getSupabaseUrl,
+  getSupabaseKey
 };

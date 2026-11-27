@@ -300,16 +300,19 @@ export const App: React.FC = () => {
   }, [printModalData]);
 
   // Handlers para OS
-  const handleSaveWorkOrder = async (osData: Partial<WorkOrder>) => {
+  const handleSaveWorkOrder = async (osData: Partial<WorkOrder>): Promise<WorkOrder | void> => {
+    let result: WorkOrder | undefined;
     if (osData.id) {
-      await api.updateWorkOrder(osData.id, osData);
+      result = await api.updateWorkOrder(osData.id, osData);
     } else {
       const created = await api.createWorkOrder(osData);
+      result = created;
       if (storeSettings?.autoPrintAfterSave) {
         setPrintModalData({ type: 'os', data: created });
       }
     }
     await loadAllData();
+    return result;
   };
 
   const handleDeleteWorkOrder = async (id: string, adminPassword?: string) => {
