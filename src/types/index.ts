@@ -68,6 +68,7 @@ export interface WorkOrder {
   accessories?: string;
   configuration?: string; // Configuração do equipamento (ex: Core i5, 8GB RAM, SSD 256GB)
   reportedIssue: string; // Defeito informado pelo cliente
+  reportedDefect?: string; // Alias de compatibilidade
   technicalReport?: string; // Diagnóstico e laudo técnico
   additionalInfo?: string; // Informações adicionais da OS
   status: WorkOrderStatus;
@@ -88,7 +89,38 @@ export interface WorkOrder {
   sellerName?: string;
   paymentMethod?: string;
   paymentStatus?: 'pendente' | 'pago';
+  photos?: WorkOrderPhoto[];
   createdAt?: string;
+}
+
+export type WorkOrderPhotoStage = 'entrada' | 'reparo' | 'conclusao';
+
+export interface WorkOrderPhoto {
+  id: string;
+  workOrderId: string;
+  stage: WorkOrderPhotoStage;
+  fileName: string;
+  storagePath: string;
+  url?: string;
+  sizeBytes: number;
+  mimeType: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export interface PendingPhotoDeletion {
+  id: string;
+  photoId: string;
+  workOrderId: string;
+  storagePath: string;
+  fileName: string;
+  stage: WorkOrderPhotoStage;
+  requestedAt: string;
+  requestedBy: string;
+  status: 'pending' | 'failed' | 'completed';
+  attempts: number;
+  lastAttemptAt?: string | null;
+  lastError?: string | null;
 }
 
 export interface Seller {

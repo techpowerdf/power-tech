@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { flushSync } from 'react-dom';
-import { Printer, X, Scissors, Copy, CheckCircle2, FileDown } from 'lucide-react';
+import { Printer, X, Scissors, Copy, CheckCircle2, FileDown, Loader2, Minimize2, Maximize2 } from 'lucide-react';
 import { WorkOrder, Sale, Quote, StoreSettings, Customer } from '../types';
 import { SaleReceiptDocument } from './SaleReceiptDocument';
 import {
@@ -18,6 +18,7 @@ import {
   sendWorkOrderViaWhatsApp,
   savePdfWithLocationPicker
 } from '../services/whatsapp';
+import { generateAndSavePdf } from '../utils/pdfGenerator';
 
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -47,6 +48,31 @@ export const PrintModal: React.FC<PrintModalProps> = ({
   const [osCopiesMode, setOsCopiesMode] = useState<'inteira' | 'ambas' | 'cliente'>(
     initialOSCopiesMode || 'inteira'
   );
+  const [mobileZoomMode, setMobileZoomMode] = useState<'fit' | '100'>('fit');
+  const [viewportWidth, setViewportWidth] = useState<number>(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1024
+  );
+  const [docHeight, setDocHeight] = useState<number>(0);
+  const printableDocRef = React.useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    const updateHeight = () => {
+      if (printableDocRef.current) {
+        setDocHeight(printableDocRef.current.offsetHeight || printableDocRef.current.scrollHeight);
+      }
+    };
+    updateHeight();
+    const timer = setTimeout(updateHeight, 120);
+    return () => clearTimeout(timer);
+  }, [osCopiesMode, printFormat, data, saleCopies, viewportWidth]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -101,40 +127,56 @@ export const PrintModal: React.FC<PrintModalProps> = ({
     }, 2500);
   };
 
+  const [isSavingPdf, setIsSavingPdf] = useState(false);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [whatsAppNotice, setWhatsAppNotice] = useState<string | null>(null);
+
   const handleSavePDF = async () => {
+    const printableElement = document.getElementById('printable-document');
+    if (!printableElement) {
+      window.print();
+      return;
+    }
+
+    const cleanClient = (
+      type === 'os'
+        ? (data as WorkOrder).customerName || 'Cliente'
+        : type === 'sale'
+        ? (data as Sale).customerName || 'Cliente'
+        : (data as Quote).customerName || 'Cliente'
+    ).trim().replace(/[\\/:*?"<>|]/g, '_');
+
+    let filename = '';
     if (type === 'os') {
       const os = data as WorkOrder;
-      const token = os.trackingToken || (os.number ? String(os.number) : os.id);
-      const pdfUrl = `/api/public/work-orders/${encodeURIComponent(token)}/pdf`;
-      const cleanClient = (os.customerName || 'Cliente').trim().replace(/[\\/:*?"<>|]/g, '_');
-      const filename = `${os.number || '0'} - ${cleanClient}.pdf`;
-      await savePdfWithLocationPicker(pdfUrl, filename);
-      return;
-    }
-
-    if (type === 'sale') {
+      const suffix =
+        osCopiesMode === 'cliente'
+          ? '_Via_Cliente'
+          : osCopiesMode === 'inteira'
+          ? '_Folha_A4'
+          : '_2Vias';
+      filename = `${os.number || '0'} - ${cleanClient}${suffix}.pdf`;
+    } else if (type === 'sale') {
       const sale = data as Sale;
-      const token = sale.receiptToken || (sale.number ? String(sale.number) : sale.id);
-      const pdfUrl = `/api/public/sales/receipt/${encodeURIComponent(token)}/pdf`;
-      const cleanClient = (sale.customerName || 'Cliente').trim().replace(/[\\/:*?"<>|]/g, '_');
-      const filename = `Recibo ${sale.number || '0'} - ${cleanClient}.pdf`;
-      await savePdfWithLocationPicker(pdfUrl, filename);
-      return;
+      filename = `Recibo ${sale.number || '0'} - ${cleanClient}.pdf`;
+    } else {
+      const quote = data as Quote;
+      filename = `Orcamento_${quote.number || quote.id?.slice(-4) || '0'}_${cleanClient}.pdf`;
     }
 
-    const originalTitle = document.title;
-    const docFileName = getDocFileName();
-    document.title = docFileName;
-
-    setTimeout(() => {
+    try {
+      setIsSavingPdf(true);
+      await generateAndSavePdf(printableElement, filename);
+    } catch (err) {
+      console.error('[PrintModal] Erro ao gerar PDF diretamente:', err);
+      // Fallback gracioso: aciona o diálogo de impressão do navegador
       window.print();
-      setTimeout(() => {
-        document.title = originalTitle;
-      }, 2500);
-    }, 100);
+    } finally {
+      setIsSavingPdf(false);
+    }
   };
 
-  const handleSendWhatsApp = () => {
+  const handleSendWhatsApp = async () => {
     if (type === 'os') {
       const os = data as WorkOrder;
       const customerObj =
@@ -142,7 +184,36 @@ export const PrintModal: React.FC<PrintModalProps> = ({
           ? customers.find((c) => c.id === os.customerId)
           : undefined;
       const phone = os.customerPhone || customerObj?.whatsapp || customerObj?.phone;
-      sendWorkOrderViaWhatsApp(os, phone, defaultStore, customerObj);
+      const printableElement = document.getElementById('printable-document');
+
+      setIsSendingWhatsApp(true);
+      setWhatsAppNotice(null);
+      try {
+        const res = await sendWorkOrderViaWhatsApp(
+          os,
+          phone,
+          defaultStore,
+          customerObj,
+          'auto',
+          null,
+          true,
+          printableElement
+        );
+
+        if (res.success) {
+          if (res.mode === 'web_share') {
+            setWhatsAppNotice('Compartilhamento da Ordem de Serviço iniciado com sucesso!');
+          } else {
+            setWhatsAppNotice(
+              'O PDF da OS foi salvo no seu dispositivo e a conversa do WhatsApp foi aberta. Basta anexar o arquivo baixado na conversa.'
+            );
+          }
+        }
+      } catch (err: any) {
+        console.error('Erro ao enviar WhatsApp:', err);
+      } finally {
+        setIsSendingWhatsApp(false);
+      }
     } else if (type === 'sale') {
       const sale = data as Sale;
       const customerObj =
@@ -596,177 +667,394 @@ export const PrintModal: React.FC<PrintModalProps> = ({
     );
   };
 
+  const baseDocWidth = 794; // ~210mm a 96 DPI
+  const isMobileView = viewportWidth < 768;
+  const availableWidth = Math.max(260, viewportWidth - 28);
+  const scale = isMobileView && mobileZoomMode === 'fit' ? Math.min(1, availableWidth / baseDocWidth) : 1;
+
   return (
     <div
-      className="print-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
+      className="print-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-1.5 sm:p-4 overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="print-modal-box bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+      <div className="print-modal-box bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col h-[96vh] sm:h-auto sm:max-h-[92vh]">
         {/* Top bar controls (no-print) */}
-        <div className="no-print p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-600/20 text-blue-400">
-              <Printer className="w-5 h-5" />
+        <div className="no-print bg-slate-950 border-b border-slate-800">
+          {/* Linha Principal do Cabeçalho */}
+          <div className="p-3 sm:p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="p-2 rounded-lg bg-blue-600/20 text-blue-400 shrink-0">
+                <Printer className="w-4 h-4 sm:w-5 sm:h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-xs sm:text-sm font-bold text-white truncate">Visualização de Impressão</h3>
+                <p className="text-[10px] sm:text-xs text-slate-400 truncate">
+                  {type === 'os' ? `OS #${(data as WorkOrder).number} (${
+                    osCopiesMode === 'inteira'
+                      ? 'Folha Inteira A4'
+                      : osCopiesMode === 'cliente'
+                      ? 'Via do Cliente'
+                      : '2 Vias na Folha'
+                  })` : ''}
+                  {type === 'sale' ? `Recibo #${(data as Sale).number} (Formato Reduzido)` : ''}
+                  {type === 'quote' ? `Orçamento #${(data as Quote).number}` : ''}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-white">Visualização de Impressão</h3>
-              <p className="text-xs text-slate-400">
-                {type === 'os' ? `Ordem de Serviço #${(data as WorkOrder).number} (${
-                  osCopiesMode === 'inteira'
-                    ? 'Folha Inteira A4'
-                    : osCopiesMode === 'cliente'
-                    ? 'Via do Cliente'
-                    : '2 Vias na Folha'
-                })` : ''}
-                {type === 'sale' ? `Comprovante de Venda #${(data as Sale).number} (Formato Reduzido)` : ''}
-                {type === 'quote' ? `Orçamento #${(data as Quote).number}` : ''}
-              </p>
+
+            {/* Ações e Controles em Desktop (ocultos em telas móveis) */}
+            <div className="hidden sm:flex items-center gap-2 shrink-0">
+              {/* Opções de Venda: 1 Via (Meia Folha) ou 2 Vias na Folha */}
+              {type === 'sale' && printFormat === 'a4' && (
+                <div className="bg-slate-800 p-0.5 rounded-lg flex text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setSaleCopies(1)}
+                    className={`px-2.5 py-1 rounded-md font-medium transition ${
+                      saleCopies === 1 ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    1 Via (Meia)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSaleCopies(2)}
+                    className={`px-2.5 py-1 rounded-md font-medium transition ${
+                      saleCopies === 2 ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    2 Vias
+                  </button>
+                </div>
+              )}
+
+              {/* Opções de Vias para Ordem de Serviço */}
+              {type === 'os' && printFormat === 'a4' && (
+                <div className="bg-slate-800 p-0.5 rounded-lg flex text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setOsCopiesMode('inteira')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition ${
+                      osCopiesMode === 'inteira' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Imprimir 1 via completa no tamanho da folha A4 inteira"
+                  >
+                    Folha Inteira
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOsCopiesMode('ambas')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition ${
+                      osCopiesMode === 'ambas' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Imprimir 2 vias na mesma folha (Loja + Cliente)"
+                  >
+                    2 Vias
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOsCopiesMode('cliente')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition ${
+                      osCopiesMode === 'cliente' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Exibir e imprimir somente a via do cliente (Meia Folha)"
+                  >
+                    Via Cliente
+                  </button>
+                </div>
+              )}
+
+              {/* Format toggle: A4 ou Térmica */}
+              <div className="bg-slate-800 p-0.5 rounded-lg flex text-xs">
+                <button
+                  type="button"
+                  onClick={() => setPrintFormat('a4')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition ${
+                    printFormat === 'a4' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Padrão A4
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintFormat('termica')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition ${
+                    printFormat === 'termica' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Térmica (80mm)
+                </button>
+              </div>
+
+              <button
+                type="button"
+                disabled={isSendingWhatsApp}
+                onClick={handleSendWhatsApp}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition active:scale-[0.98] ${
+                  isSendingWhatsApp ? 'opacity-70 cursor-wait' : ''
+                }`}
+                title={
+                  type === 'os'
+                    ? 'Enviar Ordem de Serviço completa pelo WhatsApp'
+                    : type === 'sale'
+                    ? 'Enviar Recibo de Venda pelo WhatsApp'
+                    : 'Enviar Orçamento pelo WhatsApp'
+                }
+              >
+                {isSendingWhatsApp ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>WhatsApp...</span>
+                  </>
+                ) : (
+                  <>
+                    <WhatsAppIcon className="w-3.5 h-3.5 fill-current" />
+                    <span>WhatsApp</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                disabled={isSavingPdf}
+                onClick={handleSavePDF}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-sm transition active:scale-[0.98] ${
+                  isSavingPdf ? 'opacity-70 cursor-wait' : ''
+                }`}
+                title={
+                  type === 'os'
+                    ? 'Salvar Ordem de Serviço em PDF'
+                    : type === 'sale'
+                    ? 'Salvar Recibo de Venda em PDF'
+                    : 'Salvar Orçamento em PDF'
+                }
+              >
+                {isSavingPdf ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Gerando...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileDown className="w-3.5 h-3.5" />
+                    <span>Salvar PDF</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition active:scale-[0.98]"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Imprimir</span>
+              </button>
+
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Botão Fechar em Mobile (fixado no topo direito) */}
+            <div className="flex sm:hidden items-center gap-2 shrink-0">
+              <button
+                onClick={onClose}
+                className="p-2 rounded-xl bg-slate-800 active:bg-slate-700 text-slate-300 hover:text-white transition flex items-center justify-center"
+                title="Fechar visualização"
+                aria-label="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Opções de Venda: 1 Via (Meia Folha) ou 2 Vias na Folha */}
-            {type === 'sale' && printFormat === 'a4' && (
-              <div className="bg-slate-800 p-0.5 rounded-lg flex text-xs">
+          {/* Linha 2 de Controles em Mobile: Seletores de Vias e Formato */}
+          <div className="sm:hidden px-3 pb-3 pt-0 flex flex-col gap-2 border-t border-slate-900/60">
+            <div className="flex items-center justify-between gap-2 pt-1">
+              {/* Vias OS em Mobile */}
+              {type === 'os' && printFormat === 'a4' && (
+                <div className="bg-slate-900 border border-slate-800 p-0.5 rounded-lg flex text-[11px] flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setOsCopiesMode('inteira')}
+                    className={`flex-1 py-1.5 rounded-md font-bold transition text-center ${
+                      osCopiesMode === 'inteira' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400'
+                    }`}
+                  >
+                    Folha A4
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOsCopiesMode('ambas')}
+                    className={`flex-1 py-1.5 rounded-md font-bold transition text-center ${
+                      osCopiesMode === 'ambas' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400'
+                    }`}
+                  >
+                    2 Vias
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOsCopiesMode('cliente')}
+                    className={`flex-1 py-1.5 rounded-md font-bold transition text-center ${
+                      osCopiesMode === 'cliente' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400'
+                    }`}
+                  >
+                    Cliente
+                  </button>
+                </div>
+              )}
+
+              {/* Vias Venda em Mobile */}
+              {type === 'sale' && printFormat === 'a4' && (
+                <div className="bg-slate-900 border border-slate-800 p-0.5 rounded-lg flex text-[11px] flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setSaleCopies(1)}
+                    className={`flex-1 py-1.5 rounded-md font-bold transition text-center ${
+                      saleCopies === 1 ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400'
+                    }`}
+                  >
+                    1 Via (Meia)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSaleCopies(2)}
+                    className={`flex-1 py-1.5 rounded-md font-bold transition text-center ${
+                      saleCopies === 2 ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400'
+                    }`}
+                  >
+                    2 Vias
+                  </button>
+                </div>
+              )}
+
+              {/* Formato: A4 / Térmica em Mobile */}
+              <div className="bg-slate-900 border border-slate-800 p-0.5 rounded-lg flex text-[11px] shrink-0">
                 <button
                   type="button"
-                  onClick={() => setSaleCopies(1)}
-                  className={`px-2.5 py-1 rounded-md font-medium transition ${
-                    saleCopies === 1 ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                  onClick={() => setPrintFormat('a4')}
+                  className={`px-3 py-1.5 rounded-md font-bold transition ${
+                    printFormat === 'a4' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400'
                   }`}
                 >
-                  1 Via (Meia Folha)
+                  A4
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSaleCopies(2)}
-                  className={`px-2.5 py-1 rounded-md font-medium transition ${
-                    saleCopies === 2 ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                  onClick={() => setPrintFormat('termica')}
+                  className={`px-3 py-1.5 rounded-md font-bold transition ${
+                    printFormat === 'termica' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400'
                   }`}
                 >
-                  2 Vias na Folha
+                  80mm
                 </button>
               </div>
-            )}
-
-            {/* Opções de Vias para Ordem de Serviço */}
-            {type === 'os' && printFormat === 'a4' && (
-              <div className="bg-slate-800 p-0.5 rounded-lg flex text-xs">
-                <button
-                  type="button"
-                  onClick={() => setOsCopiesMode('inteira')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition ${
-                    osCopiesMode === 'inteira' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Imprimir 1 via completa no tamanho da folha A4 inteira"
-                >
-                  Folha Inteira A4
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOsCopiesMode('ambas')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition ${
-                    osCopiesMode === 'ambas' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Imprimir 2 vias na mesma folha (Loja + Cliente)"
-                >
-                  2 Vias na Folha
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOsCopiesMode('cliente')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition ${
-                    osCopiesMode === 'cliente' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Exibir e imprimir somente a via do cliente (Meia Folha)"
-                >
-                  Via do Cliente
-                </button>
-              </div>
-            )}
-
-            {/* Format toggle: A4 ou Térmica */}
-            <div className="bg-slate-800 p-0.5 rounded-lg flex text-xs">
-              <button
-                type="button"
-                onClick={() => setPrintFormat('a4')}
-                className={`px-3 py-1 rounded-md font-medium transition ${
-                  printFormat === 'a4' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Padrão A4
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintFormat('termica')}
-                className={`px-3 py-1 rounded-md font-medium transition ${
-                  printFormat === 'termica' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Térmica (80mm)
-              </button>
             </div>
-
-            <button
-              type="button"
-              onClick={handleSendWhatsApp}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition active:scale-[0.98]"
-              title={
-                type === 'os'
-                  ? 'Enviar Ordem de Serviço completa pelo WhatsApp'
-                  : type === 'sale'
-                  ? 'Enviar Recibo de Venda pelo WhatsApp'
-                  : 'Enviar Orçamento pelo WhatsApp'
-              }
-            >
-              <WhatsAppIcon className="w-3.5 h-3.5 fill-current" />
-              <span>Enviar WhatsApp</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSavePDF}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-sm transition active:scale-[0.98]"
-              title={
-                type === 'os'
-                  ? 'Salvar Ordem de Serviço em PDF'
-                  : type === 'sale'
-                  ? 'Salvar Recibo de Venda em PDF'
-                  : 'Salvar Orçamento em PDF'
-              }
-            >
-              <FileDown className="w-4 h-4" />
-              <span>Salvar como PDF</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition active:scale-[0.98]"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Imprimir Agora</span>
-            </button>
-
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
         </div>
 
+        {/* Aviso de Orientação do WhatsApp */}
+        {whatsAppNotice && (
+          <div className="mx-3 sm:mx-6 mt-3 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center justify-between gap-3 shadow-xs animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <span className="text-base text-emerald-400 leading-none">✓</span>
+              <span>{whatsAppNotice}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWhatsAppNotice(null)}
+              className="text-emerald-400 hover:text-white p-1 rounded hover:bg-emerald-500/20"
+              title="Fechar aviso"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Printable Document Container */}
-        <div className="print-modal-body flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100 flex justify-center">
+        <div className="print-modal-body flex-1 overflow-y-auto p-2 sm:p-6 bg-slate-100 flex flex-col items-center">
           {printFormat === 'a4' ? (
             <div
-              id="printable-document"
-              className="bg-white text-slate-900 w-full max-w-[210mm] p-4 sm:p-6 rounded-lg shadow-md text-[10.5px] leading-relaxed border-0"
-              style={{ width: '100%', boxSizing: 'border-box' }}
+              className="print-preview-viewport w-full flex flex-col items-center"
+              style={{
+                overflowX: isMobileView && mobileZoomMode === '100' ? 'auto' : 'hidden',
+                overflowY: 'visible',
+                WebkitOverflowScrolling: 'touch'
+              }}
             >
+              {/* Barra de Zoom / Info em Mobile */}
+              {isMobileView && (
+                <div className="no-print w-full max-w-[794px] mb-2 flex items-center justify-between px-1 text-[11px] text-slate-500 shrink-0">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                    <span>A4 Oficial (210 &times; 297 mm)</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-200 p-0.5 rounded-lg border border-slate-300">
+                    <button
+                      type="button"
+                      onClick={() => setMobileZoomMode('fit')}
+                      className={`px-2 py-0.5 rounded font-bold transition flex items-center gap-1 text-[10px] ${
+                        mobileZoomMode === 'fit'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="Ajustar documento à largura da tela do celular"
+                    >
+                      <Minimize2 className="w-3 h-3" />
+                      <span>Ajustar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMobileZoomMode('100')}
+                      className={`px-2 py-0.5 rounded font-bold transition flex items-center gap-1 text-[10px] ${
+                        mobileZoomMode === '100'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="Visualizar em tamanho real (100%) com rolagem suave"
+                    >
+                      <Maximize2 className="w-3 h-3" />
+                      <span>100%</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="w-full flex justify-center">
+                <div
+                  ref={printableDocRef}
+                  id="printable-document"
+                  className="bg-white text-slate-900 p-4 sm:p-6 rounded-lg shadow-md text-[10.5px] leading-relaxed border-0"
+                  style={
+                    isMobileView && mobileZoomMode === 'fit'
+                      ? ({
+                          width: `${baseDocWidth}px`,
+                          minWidth: `${baseDocWidth}px`,
+                          maxWidth: `${baseDocWidth}px`,
+                          zoom: scale,
+                          boxSizing: 'border-box'
+                        } as React.CSSProperties)
+                      : isMobileView && mobileZoomMode === '100'
+                      ? {
+                          width: `${baseDocWidth}px`,
+                          minWidth: `${baseDocWidth}px`,
+                          maxWidth: `${baseDocWidth}px`,
+                          boxSizing: 'border-box'
+                        }
+                      : {
+                          width: '100%',
+                          maxWidth: '210mm',
+                          boxSizing: 'border-box'
+                        }
+                  }
+                >
               {/* ========================================================================= */}
               {/* ORDEM DE SERVIÇO: FOLHA INTEIRA A4 OU DUAS VIAS NA MESMA FOLHA A4          */}
               {/* OU SOMENTE VIA DO CLIENTE (QUANDO SALVAR EM PDF OU SELECIONAR 1 VIA)       */}
@@ -941,7 +1229,9 @@ export const PrintModal: React.FC<PrintModalProps> = ({
                 );
               })()}
             </div>
-          ) : (
+          </div>
+        </div>
+      ) : (
             /* Térmica 80mm format */
             <div
               id="printable-thermal"
@@ -1036,6 +1326,50 @@ export const PrintModal: React.FC<PrintModalProps> = ({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Barra de Ações Mobile Fixada na Parte Inferior do Modal */}
+        <div className="no-print sm:hidden p-2.5 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-2 shadow-2xl shrink-0">
+          <button
+            type="button"
+            disabled={isSendingWhatsApp}
+            onClick={handleSendWhatsApp}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold shadow-md transition active:scale-[0.98] ${
+              isSendingWhatsApp ? 'opacity-70 cursor-wait' : ''
+            }`}
+          >
+            {isSendingWhatsApp ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <WhatsAppIcon className="w-4 h-4 fill-current" />
+            )}
+            <span>WhatsApp</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={isSavingPdf}
+            onClick={handleSavePDF}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl bg-rose-600 active:bg-rose-700 text-white text-xs font-bold shadow-md transition active:scale-[0.98] ${
+              isSavingPdf ? 'opacity-70 cursor-wait' : ''
+            }`}
+          >
+            {isSavingPdf ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileDown className="w-4 h-4" />
+            )}
+            <span>Salvar PDF</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl bg-blue-600 active:bg-blue-700 text-white text-xs font-bold shadow-md transition active:scale-[0.98]"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Imprimir</span>
+          </button>
         </div>
       </div>
     </div>

@@ -26,6 +26,7 @@ import {
   triggerPdfDownload,
   savePdfWithLocationPicker
 } from '../services/whatsapp';
+import { generateWorkOrderPdfBlob, triggerBlobDownload } from '../utils/pdfGenerator';
 
 interface SendWhatsAppModalProps {
   isOpen: boolean;
@@ -102,12 +103,9 @@ export const SendWhatsAppModal: React.FC<SendWhatsAppModalProps> = ({
     }
 
     if (type === 'os' && workOrder) {
-      const token = workOrder.trackingToken || (workOrder.number ? String(workOrder.number) : workOrder.id);
-      const pdfUrl = `/api/public/work-orders/${encodeURIComponent(token)}/pdf`;
-      const clientName = (workOrder.customerName || 'Cliente').trim().replace(/[\\/:*?"<>|]/g, '_');
-      const filename = `${workOrder.number || '0'} - ${clientName}.pdf`;
-      const saved = await savePdfWithLocationPicker(pdfUrl, filename);
-      if (saved) setDownloadedPdf(true);
+      const { blob, filename } = await generateWorkOrderPdfBlob(workOrder, null, storeSettings);
+      triggerBlobDownload(blob, filename);
+      setDownloadedPdf(true);
       return;
     }
 
@@ -160,11 +158,23 @@ export const SendWhatsAppModal: React.FC<SendWhatsAppModalProps> = ({
             console.warn('Erro ao atualizar telefone na OS:', e);
           }
         }
-        await sendWorkOrderViaWhatsApp(workOrder, cleanPhone, storeSettings, customer, preferredMode, preOpenedWindow, onlyPdf);
-        setSendSuccess(true);
-        setTimeout(() => {
-          onClose();
-        }, 2200);
+        const res = await sendWorkOrderViaWhatsApp(
+          workOrder,
+          cleanPhone,
+          storeSettings,
+          customer,
+          preferredMode,
+          preOpenedWindow,
+          true
+        );
+        if (res.success) {
+          setSendSuccess(true);
+          setTimeout(() => {
+            onClose();
+          }, 2400);
+        } else if (res.mode === 'error') {
+          setPhoneError(res.error || 'Erro ao preparar envio pelo WhatsApp.');
+        }
         return;
       }
 
@@ -234,7 +244,7 @@ export const SendWhatsAppModal: React.FC<SendWhatsAppModalProps> = ({
             <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               <span>
-                Conversa aberta no WhatsApp com o telefone digitado e PDF copiado (pressione Ctrl+V para colar)!
+                Conversa aberta no WhatsApp e PDF da OS baixado com sucesso! Basta anexar o arquivo na conversa para enviar ao cliente.
               </span>
             </div>
           )}
@@ -278,13 +288,13 @@ export const SendWhatsAppModal: React.FC<SendWhatsAppModalProps> = ({
             </p>
           </div>
 
-          {/* Dica para Envio Exclusivo do PDF */}
+          {/* Dica para Envio do PDF */}
           <div className="p-3 rounded-xl bg-slate-950/80 border border-emerald-500/20 text-[11px] text-slate-300 flex items-start gap-2.5">
             <span className="text-emerald-400 text-base leading-none">📄</span>
             <div className="space-y-0.5">
-              <strong className="text-white">Envio Exclusivo do Arquivo PDF:</strong>
+              <strong className="text-white">Envio da Ordem de Serviço com PDF:</strong>
               <p className="text-slate-400 leading-relaxed">
-                Ao clicar no botão de envio, o sistema anexa e envia <strong>exclusivamente o arquivo PDF</strong> da {type === 'sale' ? 'venda' : 'Ordem de Serviço'}, sem mensagens de texto ou links na conversa.
+                Ao clicar no botão de envio, o sistema baixa o arquivo PDF da {type === 'sale' ? 'venda' : 'Ordem de Serviço'} e abre a conversa do cliente no WhatsApp com a mensagem pré-formatada, orientando o anexo do documento.
               </p>
             </div>
           </div>

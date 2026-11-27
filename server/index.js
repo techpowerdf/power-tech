@@ -7,7 +7,7 @@ const { getDatabase, saveDatabase, ensureDatabaseLoaded } = require('./db');
 const { executeBackup, checkDailyBackup, restoreBackup, listPhysicalBackups } = require('./backupService');
 const { emitInvoice } = require('./fiscalService');
 const { sendViaWhatsAppDesktop, sendSalePdfViaWhatsAppDesktop, sendWorkOrderPdfViaWhatsAppDesktop } = require('./whatsappDesktopService');
-const { generateReceiptPdf, generateWorkOrderPdf } = require('./pdfService');
+const { generateReceiptPdf, generateWorkOrderPdf, getBrowserExecutable } = require('./pdfService');
 const { startTunnel, getPublicUrl, getStatus, restartTunnel } = require('./tunnelService');
 const {
   hashPassword,
@@ -22,6 +22,19 @@ const {
 } = require('./authService');
 const { generateSecureToken, maskCpf, ensureTokensForExistingRecords, sanitizePublicWorkOrder, sanitizePublicSale } = require('./securityHelper');
 const { syncCustomersAndHistory, findOrCreateCustomer, getCustomerHistory } = require('./customerHistoryService');
+const {
+  savePhotoFile,
+  resolvePhotoUrl,
+  deletePhotoFile,
+  getLocalPhotoPath,
+  sanitizeErrorMessage,
+  addPendingDeletion,
+  removePendingDeletion,
+  getPendingDeletions,
+  processPendingDeletions,
+  setStorageFailureSimulation,
+  VALID_STAGES
+} = require('./photoStorageService');
 
 const app = express();
 const PORT = process.env.PORT || 4567;
@@ -914,6 +927,13 @@ app.get('/api/public/work-orders/:token/pdf', async (req, res) => {
   }
 
   try {
+    const browser = getBrowserExecutable();
+    if (!browser) {
+      // No Vercel ou ambiente de nuvem sem Chrome/Edge instalado,
+      // redireciona para a página de impressão/download sem estourar 500
+      return res.redirect(302, `/api/public/work-orders/${encodeURIComponent(token)}/imprimir?pdf=1`);
+    }
+
     const pdfPath = await generateWorkOrderPdf(token, PORT);
     const rawClient = (os.customerName || 'Cliente').trim();
     const cleanClient = rawClient.replace(/[\\/:*?"<>|]/g, '_');
@@ -943,7 +963,7 @@ app.get('/api/public/work-orders/:token/pdf', async (req, res) => {
     fs.createReadStream(pdfPath).pipe(res);
   } catch (err) {
     console.error('Erro ao gerar binário do PDF da Ordem de Serviço:', err);
-    res.status(500).send('Erro ao gerar arquivo PDF.');
+    res.redirect(302, `/api/public/work-orders/${encodeURIComponent(token)}/imprimir?pdf=1`);
   }
 });
 
@@ -1098,6 +1118,13 @@ app.get('/api/public/sales/receipt/:token/pdf', async (req, res) => {
   }
 
   try {
+    const browser = getBrowserExecutable();
+    if (!browser) {
+      // No Vercel ou ambiente de nuvem sem Chrome/Edge instalado,
+      // redireciona para a página de impressão/download sem estourar 500
+      return res.redirect(302, `/api/public/sales/receipt/${encodeURIComponent(token)}/imprimir?pdf=1`);
+    }
+
     const pdfPath = await generateReceiptPdf(token, PORT);
     const rawClient = (sale.customerName || 'Cliente').trim();
     const cleanClient = rawClient.replace(/[\\/:*?"<>|]/g, '_');
@@ -1125,7 +1152,7 @@ app.get('/api/public/sales/receipt/:token/pdf', async (req, res) => {
     fs.createReadStream(pdfPath).pipe(res);
   } catch (err) {
     console.error('Erro ao gerar binário do PDF do recibo:', err);
-    res.status(500).send('Erro ao gerar arquivo PDF.');
+    res.redirect(302, `/api/public/sales/receipt/${encodeURIComponent(token)}/imprimir?pdf=1`);
   }
 });
 
@@ -1649,6 +1676,411 @@ app.delete('/api/work-orders/:id', requireAuth, requireAdminPassword, async (req
 
   await saveDatabase(db);
   res.json({ success: true, message: 'Ordem de Serviço removida com sucesso' });
+});
+
+// ==========================================
+// FOTOGRAFIAS DAS ORDENS DE SERVIÇO
+// ==========================================
+
+// Lista todas as fotografias de uma OS com URLs assinadas temporárias
+app.get('/api/work-orders/:id/photos', requireAuth, async (req, res) => {
+  try {
+    // 1. Verificação de permissão de acesso ao módulo de OS
+    if (req.user && req.user.role !== 'admin' && req.user.permissions && req.user.permissions.workOrders === false) {
+      return res.status(403).json({ error: 'Você não possui permissão para visualizar Ordens de Serviço.' });
+    }
+
+    // 2. Validação estrita do ID da OS
+    const idOrNum = String(req.params.id || '').trim();
+    if (!idOrNum || !/^[a-zA-Z0-9_-]+$/.test(idOrNum)) {
+      return res.status(400).json({ error: 'Identificador de Ordem de Serviço inválido.' });
+    }
+
+    const db = getDatabase();
+    const idLower = idOrNum.toLowerCase();
+    const os = (db.workOrders || []).find(o => 
+      String(o.id).toLowerCase() === idLower || String(o.number) === idOrNum
+    );
+
+    if (!os) {
+      return res.status(404).json({ error: 'Ordem de Serviço não encontrada.' });
+    }
+
+    const photos = os.photos || [];
+    const token = req.headers['authorization']?.split(' ')[1] || '';
+    const reqBaseUrl = `${req.protocol}://${req.get('host')}`;
+
+    const resolvedPhotos = await Promise.all(
+      photos.map(async (photo) => {
+        let url = await resolvePhotoUrl(photo, reqBaseUrl);
+        // Se for URL local interna, anexa o token temporário para permitir carregamento em tags <img>
+        if (url && url.includes('/photos/') && url.includes('/file') && token) {
+          url = `${url}?token=${encodeURIComponent(token)}`;
+        }
+        return {
+          ...photo,
+          url
+        };
+      })
+    );
+
+    // Auto-recuperação oportunista de exclusões pendentes (Serverless self-healing)
+    if (Array.isArray(db.pendingPhotoDeletions) && db.pendingPhotoDeletions.length > 0) {
+      processPendingDeletions(db, { limit: 3 }).then((cleanupRes) => {
+        if (cleanupRes.succeeded > 0) {
+          saveDatabase(db).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
+    res.json({ success: true, photos: resolvedPhotos });
+  } catch (error) {
+    console.error('[Photos API] Erro ao listar fotos da OS:', error.message);
+    res.status(500).json({ error: 'Falha ao recuperar fotografias da Ordem de Serviço.' });
+  }
+});
+
+// Upload de nova fotografia vinculada à OS
+app.post('/api/work-orders/:id/photos', requireAuth, async (req, res) => {
+  try {
+    // 1. Verificação de permissão de gravação no módulo de OS
+    if (req.user && req.user.role !== 'admin' && req.user.permissions && req.user.permissions.workOrders === false) {
+      return res.status(403).json({ error: 'Você não possui permissão para alterar Ordens de Serviço.' });
+    }
+
+    // 2. Validação estrita do ID da OS
+    const idOrNum = String(req.params.id || '').trim();
+    if (!idOrNum || !/^[a-zA-Z0-9_-]+$/.test(idOrNum)) {
+      return res.status(400).json({ error: 'Identificador de Ordem de Serviço inválido.' });
+    }
+
+    const db = getDatabase();
+    const idLower = idOrNum.toLowerCase();
+    const osIndex = (db.workOrders || []).findIndex(o => 
+      String(o.id).toLowerCase() === idLower || String(o.number) === idOrNum
+    );
+
+    if (osIndex === -1) {
+      return res.status(404).json({ error: 'Ordem de Serviço não encontrada.' });
+    }
+
+    const { stage, fileName, base64Data, mimeType } = req.body || {};
+
+    if (!base64Data) {
+      return res.status(400).json({ error: 'Dados da imagem não fornecidos.' });
+    }
+
+    // Validação estrita do estágio
+    const validStages = ['entrada', 'reparo', 'conclusao'];
+    const safeStage = validStages.includes(stage) ? stage : 'entrada';
+
+    // Extrai a parte binária do data URI ou base64 puro
+    const cleanBase64 = String(base64Data).includes(',') 
+      ? String(base64Data).split(',')[1] 
+      : String(base64Data);
+
+    const buffer = Buffer.from(cleanBase64, 'base64');
+
+    if (!buffer || buffer.length === 0) {
+      return res.status(400).json({ error: 'Arquivo de imagem inválido ou corrompido.' });
+    }
+
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: 'O arquivo excede o limite máximo permitido de 10MB.' });
+    }
+
+    const os = db.workOrders[osIndex];
+    const username = req.user?.username || req.user?.name || 'Técnico';
+
+    // 3. Salva o arquivo no Storage (Supabase ou Local)
+    const photoMetadata = await savePhotoFile({
+      workOrderId: os.id,
+      stage: safeStage,
+      fileName: fileName || `foto_${Date.now()}.jpg`,
+      mimeType: mimeType || 'image/jpeg',
+      buffer,
+      username
+    });
+
+    if (!os.photos) {
+      os.photos = [];
+    }
+
+    os.photos.push(photoMetadata);
+
+    // 4. Gravação atômica com compensação em caso de falha no banco
+    try {
+      await saveDatabase(db);
+    } catch (dbErr) {
+      // Rollback imediato: remove do storage o arquivo recém-salvo para evitar arquivo órfão
+      os.photos.pop();
+      await deletePhotoFile(photoMetadata).catch(() => {});
+      throw new Error(`Falha ao persistir metadados da foto no banco de dados: ${dbErr.message}`);
+    }
+
+    const token = req.headers['authorization']?.split(' ')[1] || '';
+    const reqBaseUrl = `${req.protocol}://${req.get('host')}`;
+    let url = await resolvePhotoUrl(photoMetadata, reqBaseUrl);
+    if (url && url.includes('/photos/') && url.includes('/file') && token) {
+      url = `${url}?token=${encodeURIComponent(token)}`;
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Fotografia salva com sucesso.',
+      photo: {
+        ...photoMetadata,
+        url
+      }
+    });
+  } catch (error) {
+    console.error('[Photos API] Erro no upload de fotografia:', error.message);
+    res.status(500).json({ error: `Falha ao salvar fotografia: ${error.message}` });
+  }
+});
+
+// Exclusão de fotografia vinculada à OS com fila recuperável (Outbox Pattern) e validação de permissão
+app.delete('/api/work-orders/:id/photos/:photoId', requireAuth, async (req, res) => {
+  try {
+    // 1. Verificação de permissão estrita de exclusão
+    if (req.user && req.user.role !== 'admin' && req.user.permissions && 
+        (req.user.permissions.workOrdersDelete === false || req.user.permissions.workOrders === false)) {
+      return res.status(403).json({ error: 'Você não possui permissão para excluir fotografias de Ordens de Serviço.' });
+    }
+
+    // 2. Validação estrita dos IDs
+    const idOrNum = String(req.params.id || '').trim();
+    const photoId = String(req.params.photoId || '').trim();
+
+    if (!idOrNum || !/^[a-zA-Z0-9_-]+$/.test(idOrNum)) {
+      return res.status(400).json({ error: 'Identificador de Ordem de Serviço inválido.' });
+    }
+    if (!photoId || !/^[a-zA-Z0-9_-]+$/.test(photoId)) {
+      return res.status(400).json({ error: 'Identificador de fotografia inválido.' });
+    }
+
+    const db = getDatabase();
+    const idLower = idOrNum.toLowerCase();
+    const osIndex = (db.workOrders || []).findIndex(o => 
+      String(o.id).toLowerCase() === idLower || String(o.number) === idOrNum
+    );
+
+    if (osIndex === -1) {
+      return res.status(404).json({ error: 'Ordem de Serviço não encontrada.' });
+    }
+
+    const os = db.workOrders[osIndex];
+    const photoIndex = (os.photos || []).findIndex(p => p.id === photoId);
+
+    if (photoIndex === -1) {
+      return res.status(404).json({ error: 'Fotografia não encontrada nesta Ordem de Serviço.' });
+    }
+
+    const username = req.user?.username || req.user?.name || 'Técnico';
+
+    // 3. FASE 1: Desvinculação atômica da OS com registro imediato no Outbox de pendências
+    const [removedPhoto] = os.photos.splice(photoIndex, 1);
+    const pendingItem = addPendingDeletion({
+      db,
+      photo: removedPhoto,
+      workOrderId: os.id,
+      username
+    });
+
+    try {
+      await saveDatabase(db);
+    } catch (dbErr) {
+      // Rollback: restaura metadados na OS e remove a pendência se a persistência falhar
+      os.photos.splice(photoIndex, 0, removedPhoto);
+      removePendingDeletion(db, pendingItem.id);
+      throw new Error(`Falha ao persistir alterações no banco de dados: ${dbErr.message}`);
+    }
+
+    // 4. FASE 2: Tentativa imediata de exclusão física do arquivo no Storage
+    const deleteResult = await deletePhotoFile(removedPhoto);
+
+    if (deleteResult.success) {
+      // Sucesso na remoção física: conclui e remove da fila de pendências
+      removePendingDeletion(db, pendingItem.id);
+      try {
+        await saveDatabase(db);
+      } catch (saveErr) {
+        // Se o salvamento falhar aqui, o arquivo já foi excluído fisicamente;
+        // a limpeza futura será idempotente e detectará notFound sem erro
+      }
+
+      return res.json({
+        success: true,
+        message: 'Fotografia excluída com sucesso.'
+      });
+    }
+
+    // Se a remoção física falhar (ex: Supabase temporariamente indisponível ou erro de rede):
+    // A foto permanece desvinculada da OS (sem corromper a OS), e a exclusão fica registrada na fila
+    pendingItem.status = 'failed';
+    pendingItem.attempts = (pendingItem.attempts || 0) + 1;
+    pendingItem.lastAttemptAt = new Date().toISOString();
+    pendingItem.lastError = sanitizeErrorMessage(deleteResult.error || 'Erro no storage');
+
+    try {
+      await saveDatabase(db);
+    } catch (saveErr) {
+      console.error('[Photos API] Erro ao registrar falha de storage na pendência:', sanitizeErrorMessage(saveErr.message));
+    }
+
+    console.warn(`[Photos API] Exclusão física remota pendente para foto ${photoId} (OS ${os.id}). Registrado para retry.`);
+
+    return res.json({
+      success: true,
+      message: 'Fotografia removida da OS. A exclusão definitiva no armazenamento remoto está pendente e será reprocessada.',
+      pendingStorageDeletion: true,
+      pendingId: pendingItem.id
+    });
+  } catch (error) {
+    const safeMsg = sanitizeErrorMessage(error.message);
+    console.error('[Photos API] Erro ao excluir fotografia:', safeMsg);
+    res.status(500).json({ error: `Falha ao excluir fotografia: ${safeMsg}` });
+  }
+});
+
+// Consulta a fila de fotografias com exclusão pendente
+app.get('/api/work-orders/photos/pending-deletions', requireAuth, async (req, res) => {
+  try {
+    if (req.user && req.user.role !== 'admin' && req.user.permissions && 
+        (req.user.permissions.workOrdersDelete === false || req.user.permissions.workOrders === false)) {
+      return res.status(403).json({ error: 'Você não possui permissão para consultar exclusões pendentes.' });
+    }
+
+    const db = getDatabase();
+    const pendingList = getPendingDeletions(db);
+    res.json({
+      success: true,
+      total: pendingList.length,
+      pendingDeletions: pendingList
+    });
+  } catch (error) {
+    const safeMsg = sanitizeErrorMessage(error.message);
+    console.error('[Photos API] Erro ao consultar exclusões pendentes:', safeMsg);
+    res.status(500).json({ error: 'Falha ao consultar fila de exclusões pendentes.' });
+  }
+});
+
+// Reprocessa manualmente ou via job a exclusão de arquivos pendentes
+app.post('/api/work-orders/photos/cleanup-pending', requireAuth, async (req, res) => {
+  try {
+    if (req.user && req.user.role !== 'admin' && req.user.permissions && 
+        (req.user.permissions.workOrdersDelete === false || req.user.permissions.workOrders === false)) {
+      return res.status(403).json({ error: 'Você não possui permissão para processar exclusões de fotografias.' });
+    }
+
+    const db = getDatabase();
+    const results = await processPendingDeletions(db);
+
+    if (results.processed > 0) {
+      await saveDatabase(db);
+    }
+
+    res.json({
+      success: true,
+      message: 'Processamento de exclusões pendentes concluído.',
+      results
+    });
+  } catch (error) {
+    const safeMsg = sanitizeErrorMessage(error.message);
+    console.error('[Photos API] Erro ao reprocessar exclusões pendentes:', safeMsg);
+    res.status(500).json({ error: 'Falha ao processar fila de exclusões pendentes.' });
+  }
+});
+
+// Endpoint exclusivo para simulação controlada de falhas em testes automatizados
+app.post('/api/work-orders/photos/test-simulation', requireAuth, (req, res) => {
+  if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_PHOTO_TEST_SIMULATION) {
+    return res.status(403).json({ error: 'Simulação desativada em ambiente de produção.' });
+  }
+  if (req.user && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Acesso restrito ao administrador.' });
+  }
+
+  const { enabled, message } = req.body || {};
+  setStorageFailureSimulation(Boolean(enabled), message);
+  res.json({
+    success: true,
+    simulationActive: Boolean(enabled),
+    message: Boolean(enabled) ? 'Simulação de falha no storage ativada.' : 'Simulação de falha no storage desativada.'
+  });
+});
+
+// Rota de streaming seguro de fotos para modo de contingência / desenvolvimento local
+app.get('/api/work-orders/:id/photos/:photoId/file', (req, res) => {
+  // Proibição estrita em ambiente Vercel
+  if (process.env.VERCEL) {
+    return res.status(403).json({ error: 'O streaming de arquivos locais está desativado em ambiente de produção Vercel.' });
+  }
+
+  // 1. Autenticação: verifica token no Header Authorization OU no Query param ?token=
+  let token = null;
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query && req.query.token) {
+    token = String(req.query.token);
+  }
+
+  if (!token) {
+    return res.status(401).json({ error: 'Acesso negado: autenticação obrigatória para visualizar imagens.' });
+  }
+
+  let decodedUser = null;
+  try {
+    decodedUser = verifyToken(token);
+  } catch (err) {
+    return res.status(401).json({ error: 'Token de autenticação inválido ou expirado.' });
+  }
+
+  // 2. Verificação de permissão do usuário
+  if (decodedUser && decodedUser.role !== 'admin' && decodedUser.permissions && decodedUser.permissions.workOrders === false) {
+    return res.status(403).json({ error: 'Acesso negado: permissão insuficiente para visualizar documentos da OS.' });
+  }
+
+  // 3. Validação dos IDs
+  const idOrNum = String(req.params.id || '').trim();
+  const photoId = String(req.params.photoId || '').trim();
+
+  if (!idOrNum || !/^[a-zA-Z0-9_-]+$/.test(idOrNum) || !photoId || !/^[a-zA-Z0-9_-]+$/.test(photoId)) {
+    return res.status(400).json({ error: 'Parâmetros de requisição inválidos.' });
+  }
+
+  const db = getDatabase();
+  const idLower = idOrNum.toLowerCase();
+  const os = (db.workOrders || []).find(o => 
+    String(o.id).toLowerCase() === idLower || String(o.number) === idOrNum
+  );
+
+  if (!os) {
+    return res.status(404).json({ error: 'Ordem de Serviço não encontrada.' });
+  }
+
+  const photo = (os.photos || []).find(p => p.id === photoId);
+  if (!photo) {
+    return res.status(404).json({ error: 'Fotografia não encontrada nesta Ordem de Serviço.' });
+  }
+
+  const filePath = getLocalPhotoPath(os.id, photo);
+  if (!filePath || !fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'Arquivo de imagem não encontrado no armazenamento local.' });
+  }
+
+  res.setHeader('Content-Type', photo.mimeType || 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  try {
+    const stat = fs.statSync(filePath);
+    res.setHeader('Content-Length', stat.size);
+  } catch (e) {}
+  const stream = fs.createReadStream(filePath);
+  stream.on('error', () => {
+    if (!res.headersSent) res.status(500).end();
+  });
+  stream.pipe(res);
 });
 
 // ==========================================

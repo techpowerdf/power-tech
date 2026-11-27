@@ -32,7 +32,8 @@ import {
   Check,
   CreditCard,
   History,
-  BadgeDollarSign
+  BadgeDollarSign,
+  Camera
 } from 'lucide-react';
 import { WorkOrder, WorkOrderStatus, Customer, Product, ServiceItem, StoreSettings, Sale, Seller } from '../types';
 import {
@@ -48,6 +49,7 @@ import { AddItemsToOSModal } from '../components/AddItemsToOSModal';
 import { SendWhatsAppModal } from '../components/SendWhatsAppModal';
 import { CustomerHistoryModal } from '../components/CustomerHistoryModal';
 import { AdminPasswordModal, useAdminPasswordModal } from '../components/AdminPasswordModal';
+import { WorkOrderPhotosGallery } from '../components/WorkOrderPhotosGallery';
 import { api } from '../services/api';
 import {
   UNASSIGNED_SELLER_KEY,
@@ -117,6 +119,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const [viewingOS, setViewingOS] = useState<WorkOrder | null>(null);
   const [osForAddingItems, setOsForAddingItems] = useState<WorkOrder | null>(null);
   const [whatsAppModalOS, setWhatsAppModalOS] = useState<WorkOrder | null>(null);
+  const [whatsAppFeedback, setWhatsAppFeedback] = useState<{ osNumber: number | string; message: string } | null>(null);
 
   // Modal de Histórico de Cliente
   const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
@@ -939,14 +942,31 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
     }
   };
 
-  const sendWhatsAppNotification = (os: WorkOrder) => {
+  const sendWhatsAppNotification = async (os: WorkOrder) => {
     const shouldAutoSend = storeSettings?.osAutoSendPdfWhatsApp ?? true;
     const custObj = customers?.find((c) => c.id === os.customerId);
     const phone = os.customerPhone || custObj?.whatsapp || custObj?.phone;
 
     if (shouldAutoSend && phone) {
-      // Ao clicar no botão de enviar WhatsApp, dispara diretamente apenas o arquivo PDF (sem mensagem de texto)
-      sendWorkOrderViaWhatsApp(os, phone, storeSettings, custObj, 'auto', null, true);
+      setWhatsAppFeedback(null);
+      try {
+        const res = await sendWorkOrderViaWhatsApp(os, phone, storeSettings, custObj, 'auto', null, true);
+        if (res.success) {
+          if (res.mode === 'web_share') {
+            setWhatsAppFeedback({
+              osNumber: os.number,
+              message: `Compartilhamento da OS #${os.number} iniciado com sucesso!`
+            });
+          } else {
+            setWhatsAppFeedback({
+              osNumber: os.number,
+              message: `O PDF da OS #${os.number} foi salvo no seu dispositivo e a conversa do WhatsApp foi aberta. Basta anexar o arquivo baixado na conversa.`
+            });
+          }
+        }
+      } catch (err: any) {
+        console.error('Erro ao enviar OS via WhatsApp:', err);
+      }
     } else {
       // Abre a modal para confirmação/inserção do número caso não tenha telefone preenchido
       setWhatsAppModalOS(os);
@@ -954,11 +974,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   };
 
   const handleSaveWorkOrderPdfWithPicker = async (os: WorkOrder) => {
-    const token = os.trackingToken || (os.number ? String(os.number) : os.id);
-    const pdfUrl = `/api/public/work-orders/${encodeURIComponent(token)}/pdf`;
-    const cleanClient = (os.customerName || 'Cliente').trim().replace(/[\\/:*?"<>|]/g, '_');
-    const filename = `${os.number || '0'} - ${cleanClient}.pdf`;
-    await savePdfWithLocationPicker(pdfUrl, filename);
+    onPrintWorkOrder(os);
   };
 
   const filteredWorkOrders = useMemo(() => {
@@ -1392,18 +1408,29 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         }`}
                       >
                         <td className="py-3 px-4 font-bold text-white whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setViewingOS(os)}
-                            className="hover:text-blue-400 hover:underline transition cursor-pointer font-bold block app-os-number"
-                            style={{
-                              fontSize: 'var(--app-os-number-size, 14px)',
-                              color: 'var(--app-os-number-color, #38bdf8)'
-                            }}
-                            title="Visualizar Ordem de Serviço"
-                          >
-                            #{os.number}
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setViewingOS(os)}
+                              className="hover:text-blue-400 hover:underline transition cursor-pointer font-bold block app-os-number"
+                              style={{
+                                fontSize: 'var(--app-os-number-size, 14px)',
+                                color: 'var(--app-os-number-color, #38bdf8)'
+                              }}
+                              title="Visualizar Ordem de Serviço"
+                            >
+                              #{os.number}
+                            </button>
+                            {os.photos && os.photos.length > 0 && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] text-sky-400 bg-sky-950/70 border border-sky-800/60 rounded px-1.5 py-0.2 font-normal"
+                                title={`${os.photos.length} fotografia(s) anexada(s)`}
+                              >
+                                <Camera className="w-2.5 h-2.5" />
+                                {os.photos.length}
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[10px] text-slate-400 block font-normal">
                             📥 Entrada: {os.entryDate ? new Date(os.entryDate).toLocaleDateString('pt-BR') : ((os as any).createdAt ? new Date((os as any).createdAt).toLocaleDateString('pt-BR') : '-')}
                           </span>
@@ -1598,6 +1625,15 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         >
                           #{os.number}
                         </button>
+                        {os.photos && os.photos.length > 0 && (
+                          <span
+                            className="inline-flex items-center gap-0.5 text-[9px] text-sky-400 bg-sky-950/70 border border-sky-800/60 rounded px-1 py-0.2 shrink-0 font-normal"
+                            title={`${os.photos.length} fotografia(s) anexada(s)`}
+                          >
+                            <Camera className="w-2.5 h-2.5" />
+                            {os.photos.length}
+                          </span>
+                        )}
                         <span className="text-[10px] text-slate-400 truncate">
                           {os.entryDate ? new Date(os.entryDate).toLocaleDateString('pt-BR') : '-'}
                         </span>
@@ -1661,10 +1697,10 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     </div>
 
                     {/* Defeito Relatado */}
-                    {os.reportedDefect && (
+                    {(os.reportedIssue || os.reportedDefect) && (
                       <p className="text-[10px] text-slate-400 line-clamp-2 bg-slate-950/30 px-2 py-1 rounded border border-slate-800/40">
                         <span className="text-slate-500 font-semibold">Defeito: </span>
-                        {os.reportedDefect}
+                        {os.reportedIssue || os.reportedDefect}
                       </p>
                     )}
 
@@ -3920,55 +3956,70 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
             }`}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-3 sm:p-4 px-4 sm:px-6 border-b border-slate-800 bg-slate-950/70">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center font-bold">
-                  <Wrench className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-extrabold text-white">
-                      Ordem de Serviço #{viewingOS.number}
-                    </h3>
-                    {getStatusBadge(viewingOS.status)}
+            <div className="p-3 sm:p-4 px-3 sm:px-6 border-b border-slate-800 bg-slate-950/70 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center font-bold shrink-0">
+                    <Wrench className="w-4 h-4 sm:w-5 sm:h-5" />
                   </div>
-                  <p className="text-xs text-slate-400">
-                    {viewingOS.brand} {viewingOS.model} &bull; Entrada em {new Date(viewingOS.entryDate || (viewingOS as any).createdAt || Date.now()).toLocaleDateString('pt-BR')} às {new Date(viewingOS.entryDate || (viewingOS as any).createdAt || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    {viewingOS.status === 'entregue' && viewingOS.deliveredDate && (
-                      <span className="text-emerald-400 font-bold ml-2">
-                        &bull; Entregue em {new Date(viewingOS.deliveredDate).toLocaleDateString('pt-BR')} às {new Date(viewingOS.deliveredDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    )}
-                  </p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm sm:text-base font-extrabold text-white truncate">
+                        Ordem de Serviço #{viewingOS.number}
+                      </h3>
+                      {getStatusBadge(viewingOS.status)}
+                    </div>
+                    <p className="text-[11px] sm:text-xs text-slate-400 truncate">
+                      {viewingOS.brand} {viewingOS.model} &bull; Entrada em {new Date(viewingOS.entryDate || (viewingOS as any).createdAt || Date.now()).toLocaleDateString('pt-BR')} às {new Date(viewingOS.entryDate || (viewingOS as any).createdAt || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      {viewingOS.status === 'entregue' && viewingOS.deliveredDate && (
+                        <span className="text-emerald-400 font-bold ml-2">
+                          &bull; Entregue em {new Date(viewingOS.deliveredDate).toLocaleDateString('pt-BR')}
+                        </span>
+                      )}
+                    </p>
+                  </div>
                 </div>
+
+                {/* Botão Fechar no Topo Direito (sempre visível e acessível) */}
+                <button
+                  type="button"
+                  onClick={() => setViewingOS(null)}
+                  className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 transition shrink-0"
+                  title="Fechar visualização"
+                  aria-label="Fechar"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Botões de Ação da OS: fluídos e adaptáveis para desktop e mobile */}
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap pt-0.5">
                 <button
                   type="button"
                   onClick={() => handleSaveWorkOrderPdfWithPicker(viewingOS)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition shadow-md shadow-rose-600/30"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition shadow-md shadow-rose-600/20 active:scale-[0.98]"
                   title="Salvar Ordem de Serviço em PDF (Escolher Local)"
                 >
                   <FileDown className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Salvar como PDF</span>
+                  <span>Salvar PDF</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => onPrintWorkOrder(viewingOS)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition shadow-md shadow-blue-600/30"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition shadow-md shadow-blue-600/20 active:scale-[0.98]"
                   title="Imprimir 2 vias A4 ou cupom térmico"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Imprimir</span>
+                  <span>Imprimir</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => sendWhatsAppNotification(viewingOS)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition shadow-md shadow-emerald-600/30"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition shadow-md shadow-emerald-600/20 active:scale-[0.98]"
                   title="Enviar Ordem de Serviço completa pelo WhatsApp"
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Enviar WhatsApp</span>
+                  <span>WhatsApp</span>
                 </button>
                 <button
                   type="button"
@@ -3977,11 +4028,11 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     setViewingOS(null);
                     setOsForAddingItems(target);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition shadow-md shadow-amber-600/30"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition shadow-md shadow-amber-600/20 active:scale-[0.98]"
                   title="Adicionar Serviço ou Peça ao Equipamento"
                 >
                   <PlusCircle className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Adicionar Peça/Serviço</span>
+                  <span>+ Peça/Serviço</span>
                 </button>
                 <button
                   type="button"
@@ -3990,19 +4041,11 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                     setViewingOS(null);
                     openEditModal(target);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-semibold transition"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-semibold transition active:scale-[0.98]"
                   title="Editar dados da OS"
                 >
                   <Edit className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Editar</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewingOS(null)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-                  title="Fechar"
-                >
-                  <X className="w-5 h-5" />
+                  <span>Editar</span>
                 </button>
               </div>
             </div>
@@ -4234,6 +4277,17 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                 </div>
               </div>
 
+              {/* 4. Fotografias do Equipamento & Vistoria */}
+              <WorkOrderPhotosGallery
+                workOrder={viewingOS}
+                onPhotosUpdated={(updatedPhotos) => {
+                  setViewingOS((prev) => (prev ? { ...prev, photos: updatedPhotos } : null));
+                  setWorkOrders((prev) =>
+                    prev.map((o) => (o.id === viewingOS.id ? { ...o, photos: updatedPhotos } : o))
+                  );
+                }}
+              />
+
               {/* Resumo Financeiro e Técnico */}
               <div className={`grid grid-cols-1 sm:grid-cols-2 ${viewingOS.status === 'entregue' && viewingOS.deliveredDate ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800`}>
                 <div>
@@ -4288,32 +4342,32 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between p-4 px-6 border-t border-slate-800 bg-slate-950/70">
-              <span className="text-xs text-slate-500 font-mono">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between p-3 sm:p-4 px-4 sm:px-6 border-t border-slate-800 bg-slate-950/70 gap-3">
+              <span className="text-[10px] sm:text-xs text-slate-500 font-mono truncate">
                 ID interno: {viewingOS.id}
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handleSaveWorkOrderPdfWithPicker(viewingOS)}
-                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-rose-600/20"
+                  className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/20 active:scale-[0.98]"
                   title="Salvar Ordem de Serviço em PDF (Escolher Local)"
                 >
                   <FileDown className="w-3.5 h-3.5" />
-                  Salvar como PDF
+                  <span>Salvar como PDF</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => onPrintWorkOrder(viewingOS)}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center gap-1.5"
+                  className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-[0.98]"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  Imprimir OS
+                  <span>Imprimir OS</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewingOS(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                  className="px-3 sm:px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition text-center"
                 >
                   Fechar
                 </button>
@@ -4363,6 +4417,27 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
       {/* Modal de Senha do Administrador para Exclusões */}
       <AdminPasswordModal {...adminModalProps} />
+
+      {/* Notificação Flutuante de Orientação do WhatsApp */}
+      {whatsAppFeedback && (
+        <div className="fixed bottom-5 right-5 z-50 max-w-md bg-slate-900 border border-emerald-500/40 text-emerald-300 p-4 rounded-2xl shadow-2xl animate-in slide-in-from-bottom-5 duration-300 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+            <CheckCircle2 className="w-4 h-4" />
+          </div>
+          <div className="flex-1">
+            <h4 className="text-xs font-bold text-white mb-0.5">Ordem de Serviço #{whatsAppFeedback.osNumber}</h4>
+            <p className="text-[11px] text-slate-300 leading-relaxed">{whatsAppFeedback.message}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setWhatsAppFeedback(null)}
+            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition shrink-0"
+            title="Fechar notificação"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

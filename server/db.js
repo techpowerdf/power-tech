@@ -335,6 +335,7 @@ const INITIAL_DATA = {
     }
   ],
   workOrders: [],
+  pendingPhotoDeletions: [],
   sales: [],
   quotes: [],
   fiscalInvoices: [],
@@ -478,6 +479,7 @@ function loadLocalDatabase() {
     }
     if (!data.companyEquipments) data.companyEquipments = [];
     if (!data.companyMaintenances) data.companyMaintenances = [];
+    if (!data.pendingPhotoDeletions) data.pendingPhotoDeletions = [];
     return data;
   } catch (error) {
     console.error('Erro ao ler banco de dados local:', error);

@@ -3,6 +3,9 @@ import {
   Product,
   ServiceItem,
   WorkOrder,
+  WorkOrderPhoto,
+  WorkOrderPhotoStage,
+  PendingPhotoDeletion,
   Sale,
   Quote,
   FiscalConfig,
@@ -185,6 +188,26 @@ export const api = {
     fetchJson<WorkOrder>(`/work-orders/${id}/items`, {
       method: 'POST',
       body: JSON.stringify({ items, paymentMethod, paymentStatus })
+    }),
+  getWorkOrderPhotos: (workOrderId: string) =>
+    fetchJson<{ success: boolean; photos: WorkOrderPhoto[] }>(`/work-orders/${workOrderId}/photos`),
+  uploadWorkOrderPhoto: (
+    workOrderId: string,
+    data: { stage: WorkOrderPhotoStage; fileName: string; base64Data: string; mimeType: string }
+  ) =>
+    fetchJson<{ success: boolean; message: string; photo: WorkOrderPhoto }>(`/work-orders/${workOrderId}/photos`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  deleteWorkOrderPhoto: (workOrderId: string, photoId: string) =>
+    fetchJson<{ success: boolean; message: string; pendingStorageDeletion?: boolean; pendingId?: string }>(`/work-orders/${workOrderId}/photos/${photoId}`, {
+      method: 'DELETE'
+    }),
+  getPendingPhotoDeletions: () =>
+    fetchJson<{ success: boolean; total: number; pendingDeletions: PendingPhotoDeletion[] }>('/work-orders/photos/pending-deletions'),
+  cleanupPendingPhotoDeletions: () =>
+    fetchJson<{ success: boolean; message: string; results: { processed: number; succeeded: number; failed: number; remaining: number } }>('/work-orders/photos/cleanup-pending', {
+      method: 'POST'
     }),
 
   // Products (Estoque)

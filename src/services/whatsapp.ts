@@ -1,6 +1,17 @@
 import { WorkOrder, Sale, Quote, StoreSettings, Customer } from '../types';
 import { api } from './api';
 import { computeAggregateWarrantyDays, formatDynamicWarrantyTerms } from '../utils/warrantyHelpers';
+import {
+  savePdfWithLocationPicker,
+  triggerBlobDownload,
+  generateWorkOrderPdfBlob
+} from '../utils/pdfGenerator';
+
+export {
+  savePdfWithLocationPicker,
+  triggerBlobDownload,
+  generateWorkOrderPdfBlob
+};
 
 /**
  * Normaliza e formata o telefone para o padrão internacional do WhatsApp (+55 Brasil).
@@ -647,73 +658,6 @@ export const triggerPdfDownload = async (url: string, filename: string): Promise
   }
 };
 
-/**
- * Salva um PDF solicitando ao usuário onde salvar no computador (File System Access API).
- * Abre a janela nativa do Windows Explorer ("Salvar Como") permitindo escolher qualquer pasta ou disco.
- * Caso o usuário cancele, a operação é finalizada silenciosamente sem erros.
- * Caso a API não esteja disponível no navegador, realiza o fallback seguro via download.
- */
-export const savePdfWithLocationPicker = async (
-  pdfSource: string | Blob,
-  suggestedFilename: string
-): Promise<boolean> => {
-  try {
-    let blob: Blob;
-    if (typeof pdfSource === 'string') {
-      const res = await fetch(pdfSource);
-      if (!res.ok) throw new Error(`Falha ao obter arquivo PDF: HTTP ${res.status}`);
-      blob = await res.blob();
-    } else {
-      blob = pdfSource;
-    }
-
-    // 1. Tenta a API nativa do navegador (Chromium/Edge/Chrome no Windows)
-    if ('showSaveFilePicker' in window && typeof (window as any).showSaveFilePicker === 'function') {
-      try {
-        const fileHandle = await (window as any).showSaveFilePicker({
-          suggestedName: suggestedFilename,
-          types: [
-            {
-              description: 'Documento PDF (*.pdf)',
-              accept: {
-                'application/pdf': ['.pdf'],
-              },
-            },
-          ],
-        });
-
-        const writableStream = await fileHandle.createWritable();
-        await writableStream.write(blob);
-        await writableStream.close();
-        return true;
-      } catch (pickerErr: any) {
-        // Se o usuário cancelou a janela do Windows Explorer, não faz download silencioso
-        if (pickerErr.name === 'AbortError') {
-          return false;
-        }
-        console.warn('[SavePDF] showSaveFilePicker falhou, tentando fallback:', pickerErr);
-      }
-    }
-
-    // 2. Fallback caso showSaveFilePicker não esteja disponível
-    const blobUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = suggestedFilename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => {
-      try {
-        window.URL.revokeObjectURL(blobUrl);
-      } catch {}
-    }, 30000);
-    return true;
-  } catch (err) {
-    console.error('[SavePDF] Erro ao salvar arquivo PDF:', err);
-    return false;
-  }
-};
 
 /**
  * Dispara abertura segura da conversa no WhatsApp sem abortar requisições ou downloads na página.
@@ -854,10 +798,34 @@ export const sendSaleReceiptViaWhatsApp = async (
   return { success: true, mode: 'sent' };
 };
 
+export interface SendWorkOrderWhatsAppResult {
+  success: boolean;
+  mode:
+    | 'web_share'
+    | 'share_cancelled'
+    | 'desktop_download_and_chat'
+    | 'mobile_download_and_chat'
+    | 'cancelled'
+    | 'error'
+    | 'sent';
+  filename?: string;
+  blob?: Blob;
+  error?: string;
+}
+
 /**
- * Envia exclusivamente o ARQUIVO PDF da Ordem de Serviço via WhatsApp.
- * Não envia links de acompanhamento: aciona a automação desktop para colar o PDF anexo
- * junto com a mensagem simplificada de agradecimento e dispara o download do arquivo PDF.
+ * Compartilha a Ordem de Serviço pelo WhatsApp de forma unificada e multiplataforma:
+ * - No Celular (quando Web Share API com arquivos for suportada):
+ *   Gera o PDF da OS, valida suporte a compartilhamento nativo de arquivos e abre
+ *   a folha de compartilhamento nativa do sistema operacional (Android/iOS) com o PDF
+ *   e a mensagem de texto da OS, permitindo ao usuário selecionar o contato no WhatsApp
+ *   e confirmar o envio.
+ * - No Computador (ou Celulares sem suporte a compartilhamento de arquivos):
+ *   Gera o PDF da OS via canvas no cliente (Etapa 1), baixa o arquivo PDF diretamente
+ *   na máquina do usuário, abre a conversa do WhatsApp com o telefone do cliente e o texto
+ *   da OS pré-formatado, e orienta de forma clara a anexar o documento baixado.
+ * - Trata cancelamentos da folha de compartilhamento (AbortError) sem exibir erro ao usuário.
+ * - Evita gerar o PDF duas vezes no mesmo fluxo.
  */
 export const sendWorkOrderViaWhatsApp = async (
   os: WorkOrder,
@@ -866,8 +834,9 @@ export const sendWorkOrderViaWhatsApp = async (
   customer?: Customer,
   preferredPlatform: 'auto' | 'web' | 'desktop' = 'auto',
   targetWindow?: Window | null,
-  onlyPdf: boolean = true
-): Promise<{ success: boolean; mode: string }> => {
+  includeMessage: boolean = true,
+  printableElement?: HTMLElement | null
+): Promise<SendWorkOrderWhatsAppResult> => {
   const storeDdd = storeSettings?.phone || storeSettings?.whatsapp || '';
   let targetPhone = cleanAndFormatPhoneNumber(
     phone || os.customerPhone || customer?.whatsapp || customer?.phone,
@@ -889,56 +858,105 @@ export const sendWorkOrderViaWhatsApp = async (
     }
   }
 
-  // 1. Mensagem de texto: quando onlyPdf for true (padrão ao clicar no botão de enviar WhatsApp), NÃO envia texto, envia apenas o arquivo PDF!
-  const msgText = onlyPdf
-    ? ''
-    : (os.status === 'concluida'
+  // 1. Mensagem de texto: formata a mensagem com as informações da OS e cliente
+  const msgText = includeMessage !== false
+    ? (os.status === 'concluida'
         ? (storeSettings?.osReadyMessageEnabled !== false
             ? formatWorkOrderReadyCustomMessage(os, storeSettings)
             : formatWorkOrderReadyWhatsAppMessage(os, storeSettings))
         : (os.status === 'entregue' && storeSettings?.osDeliveredMessageEnabled
             ? formatWorkOrderDeliveredCustomMessage(os, storeSettings)
-            : formatWorkOrderWhatsAppMessage(os, storeSettings)));
+            : formatWorkOrderWhatsAppMessage(os, storeSettings)))
+    : '';
 
-  // 2. Aciona o backend para gerar o PDF da OS e copiá-lo para a área de transferência do Windows (Ctrl+V)
-  let backendHandledDesktop = false;
+  // 2. Geração do PDF no cliente (gerado uma única vez)
+  let generatedPdf: { blob: Blob; filename: string };
   try {
-    const res = await api.sendWorkOrderPdfViaWhatsApp(os.id, targetPhone || undefined, msgText);
-    if (res && res.mode === 'desktop_pdf_attached') {
-      backendHandledDesktop = true;
-    }
-  } catch (err) {
-    console.warn('[WhatsApp] Erro na automação de cópia para clipboard da OS:', err);
+    generatedPdf = await generateWorkOrderPdfBlob(os, printableElement, storeSettings);
+  } catch (pdfErr: any) {
+    console.error('[WhatsApp] Erro ao gerar PDF da OS:', pdfErr);
+    if (targetWindow && !targetWindow.closed) targetWindow.close();
+    return {
+      success: false,
+      mode: 'error',
+      error: 'Não foi possível gerar o PDF da ordem de serviço. Verifique a conexão e tente novamente.'
+    };
   }
 
-  // 3. Dispara o download automático do arquivo físico do PDF para a máquina
+  const { blob, filename } = generatedPdf;
+
+  // 3. Verifica suporte à Web Share API com arquivos (dispositivos móveis modernos)
+  let fileToShare: File | null = null;
   try {
-    const token = os.trackingToken || (os.number ? String(os.number) : os.id);
-    if (token) {
-      const pdfUrl = `/api/public/work-orders/${encodeURIComponent(token)}/pdf`;
-      const clientName = (os.customerName || 'Cliente').trim().replace(/[\\/:*?"<>|]/g, '_');
-      const filename = `${os.number || '0'} - ${clientName}.pdf`;
-      await triggerPdfDownload(pdfUrl, filename);
+    if (typeof File !== 'undefined') {
+      fileToShare = new File([blob], filename, { type: 'application/pdf' });
     }
   } catch (e) {
-    console.warn('[WhatsApp] Erro ao disparar download do PDF da OS:', e);
+    console.warn('[WhatsApp] Falha ao criar File a partir do Blob:', e);
   }
 
-  // 4. URLs oficiais para WhatsApp Web e Desktop com a mensagem de agradecimento
+  const canShareFiles = Boolean(
+    fileToShare &&
+    typeof navigator !== 'undefined' &&
+    typeof navigator.share === 'function' &&
+    typeof navigator.canShare === 'function' &&
+    navigator.canShare({ files: [fileToShare] })
+  );
+
+  // FLUXO CELULAR (WEB SHARE API COM ARQUIVOS):
+  if (canShareFiles && fileToShare) {
+    const shareData: ShareData = {
+      title: `Ordem de Serviço #${os.number || ''}`,
+      files: [fileToShare],
+    };
+
+    if (msgText && navigator.canShare({ ...shareData, text: msgText })) {
+      shareData.text = msgText;
+    }
+
+    try {
+      await navigator.share(shareData);
+      if (targetWindow && !targetWindow.closed) targetWindow.close();
+      return { success: true, mode: 'web_share', filename, blob };
+    } catch (shareErr: any) {
+      if (shareErr.name === 'AbortError') {
+        // Usuário cancelou ou fechou o menu de compartilhamento
+        if (targetWindow && !targetWindow.closed) targetWindow.close();
+        return { success: false, mode: 'share_cancelled', filename, blob };
+      }
+      console.warn('[WhatsApp] navigator.share falhou, acionando fallback de download:', shareErr);
+      // Se falhar por outra razão técnica, prossegue para o fallback abaixo
+    }
+  }
+
+  // FLUXO COMPUTADOR / FALLBACK CELULAR:
+  // 4. Dispara download direto do arquivo PDF no dispositivo do usuário
+  try {
+    triggerBlobDownload(blob, filename);
+  } catch (dlErr) {
+    console.warn('[WhatsApp] Erro no download do Blob da OS:', dlErr);
+  }
+
+  // 5. Prepara URLs do WhatsApp Web e Desktop com a mensagem preenchida
   const encodedMsg = encodeURIComponent(msgText);
   const webUrl = targetPhone
-    ? `https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodedMsg}`
+    ? `https://web.whatsapp.com/send?phone=${targetPhone}${encodedMsg ? `&text=${encodedMsg}` : ''}`
     : `https://web.whatsapp.com`;
   const desktopUrl = targetPhone
-    ? `whatsapp://send?phone=${targetPhone}&text=${encodedMsg}`
-    : `whatsapp://send?text=${encodedMsg}`;
+    ? `whatsapp://send?phone=${targetPhone}${encodedMsg ? `&text=${encodedMsg}` : ''}`
+    : `whatsapp://${encodedMsg ? `send?text=${encodedMsg}` : ''}`;
 
-  // 5. Executa a abertura segura apenas se não tiver sido manipulada pelo backend desktop
-  if (preferredPlatform === 'web' || !backendHandledDesktop) {
-    launchWhatsAppConversation(desktopUrl, webUrl, preferredPlatform, targetWindow);
-  } else if (targetWindow && !targetWindow.closed) {
-    targetWindow.close();
-  }
+  // 6. Abre a conversa no WhatsApp
+  launchWhatsAppConversation(desktopUrl, webUrl, preferredPlatform, targetWindow);
 
-  return { success: true, mode: 'sent' };
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  );
+
+  return {
+    success: true,
+    mode: isMobile ? 'mobile_download_and_chat' : 'desktop_download_and_chat',
+    filename,
+    blob
+  };
 };
