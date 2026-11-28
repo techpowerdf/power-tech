@@ -1,8 +1,59 @@
+require('dotenv').config();
 const crypto = require('crypto');
 const { getDatabase, saveDatabase } = require('./db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'powertech-secret-production-key-change-in-env-file';
+const OLD_INSECURE_FALLBACK = 'powertech-secret-production-key-change-in-env-file';
+const DEV_ONLY_FALLBACK = 'powertech-dev-only-local-secret-do-not-use-in-production';
+const HEX_64_REGEX = /^[0-9a-fA-F]{64}$/;
 const TOKEN_EXPIRY_SECONDS = 60 * 60 * 24 * 7; // 7 dias
+
+/**
+ * Identifica se a aplicação está executando em ambiente de produção (Vercel ou servidor dedicado)
+ */
+function isProductionEnvironment() {
+  return process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+}
+
+/**
+ * Obtém a chave de assinatura JWT de forma segura:
+ * - Em produção: JWT_SECRET é estritamente obrigatória, deve ter exatamente 64 caracteres hexadecimais
+ *   (32 bytes aleatórios) e nunca pode ser a chave pública legada ou de dev.
+ * - Em desenvolvimento local: utiliza JWT_SECRET se definida, ou o fallback exclusivo de dev.
+ */
+function getJwtSecret() {
+  const isProd = isProductionEnvironment();
+  const configuredSecret = (process.env.JWT_SECRET || '').trim();
+
+  if (isProd) {
+    if (!configuredSecret) {
+      const errorMsg = '[Segurança] Falha crítica de inicialização: A variável de ambiente JWT_SECRET é obrigatória em ambiente de produção.';
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+    if (configuredSecret === OLD_INSECURE_FALLBACK || configuredSecret === DEV_ONLY_FALLBACK) {
+      const errorMsg = '[Segurança] Falha crítica de inicialização: A variável JWT_SECRET em produção não pode utilizar chaves padrão ou de desenvolvimento.';
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+    if (!HEX_64_REGEX.test(configuredSecret)) {
+      const errorMsg = '[Segurança] Falha crítica de inicialização: A variável JWT_SECRET em produção deve conter exatamente 64 caracteres hexadecimais (32 bytes aleatórios).';
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+    return configuredSecret;
+  }
+
+  // Em ambiente local de desenvolvimento
+  if (configuredSecret) {
+    return configuredSecret;
+  }
+  return DEV_ONLY_FALLBACK;
+}
+
+// Validação imediata na inicialização caso esteja em produção
+if (isProductionEnvironment()) {
+  getJwtSecret();
+}
 
 /**
  * Gera hash seguro para senha usando PBKDF2 (SHA-512 com 100.000 iterações e salt aleatório)
@@ -29,8 +80,10 @@ function verifyPassword(password, storedPasswordHash) {
 
 /**
  * Cria token assinado HMAC-SHA256 no formato compacto JWT (header.payload.signature)
+ * Utiliza estritamente a chave resolvida por getJwtSecret()
  */
-function createToken(payload, secret = JWT_SECRET) {
+function createToken(payload) {
+  const secret = getJwtSecret();
   const header = { alg: 'HS256', typ: 'JWT' };
   const now = Math.floor(Date.now() / 1000);
   const fullPayload = {
@@ -51,12 +104,14 @@ function createToken(payload, secret = JWT_SECRET) {
 
 /**
  * Valida e decodifica o token HMAC-SHA256
+ * Utiliza estritamente a chave resolvida por getJwtSecret()
  */
-function verifyToken(token, secret = JWT_SECRET) {
+function verifyToken(token) {
   if (!token || typeof token !== 'string') throw new Error('Token ausente');
   const parts = token.split('.');
   if (parts.length !== 3) throw new Error('Formato de token inválido');
 
+  const secret = getJwtSecret();
   const [b64Header, b64Payload, signature] = parts;
   const expectedSignature = crypto
     .createHmac('sha256', secret)
@@ -226,5 +281,9 @@ module.exports = {
   validateAdminPassword,
   requireAdminPassword,
   ensureDefaultAdminUser,
-  JWT_SECRET
+  getJwtSecret,
+  isProductionEnvironment,
+  get JWT_SECRET() {
+    return getJwtSecret();
+  }
 };
