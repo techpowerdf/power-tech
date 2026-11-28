@@ -34,6 +34,7 @@ import {
   History,
   BadgeDollarSign,
   Camera,
+  Star,
   Image as ImageIcon
 } from 'lucide-react';
 import { WorkOrder, WorkOrderStatus, Customer, Product, ServiceItem, StoreSettings, Sale, Seller, WorkOrderPhotoStage } from '../types';
@@ -49,6 +50,7 @@ import {
 import { lookupCNPJ, formatCNPJ, cleanDigits } from '../services/cnpj';
 import { AddItemsToOSModal } from '../components/AddItemsToOSModal';
 import { SendWhatsAppModal } from '../components/SendWhatsAppModal';
+import { SendWorkOrderReviewModal } from '../components/SendWorkOrderReviewModal';
 import { CustomerHistoryModal } from '../components/CustomerHistoryModal';
 import { AdminPasswordModal, useAdminPasswordModal } from '../components/AdminPasswordModal';
 import { WorkOrderPhotosGallery } from '../components/WorkOrderPhotosGallery';
@@ -133,6 +135,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   const [viewingOS, setViewingOS] = useState<WorkOrder | null>(null);
   const [osForAddingItems, setOsForAddingItems] = useState<WorkOrder | null>(null);
   const [whatsAppModalOS, setWhatsAppModalOS] = useState<WorkOrder | null>(null);
+  const [reviewModalOS, setReviewModalOS] = useState<WorkOrder | null>(null);
   const [whatsAppFeedback, setWhatsAppFeedback] = useState<{ osNumber: number | string; message: string } | null>(null);
 
   // Fotografias em estágio (capturadas antes do salvamento da OS)
@@ -1760,6 +1763,16 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                             >
                               <MessageSquare className="app-action-icon" />
                             </button>
+                            {storeSettings?.osReviewMessageEnabled !== false && (
+                              <button
+                                type="button"
+                                onClick={() => setReviewModalOS(os)}
+                                className="p-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/20 transition active:scale-95"
+                                title="Mensagem de avaliação pelo WhatsApp"
+                              >
+                                <Star className="app-action-icon fill-amber-400/30" />
+                              </button>
+                            )}
                             <button
                               onClick={() => onPrintWorkOrder(os)}
                               className="p-1.5 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 transition"
@@ -1940,6 +1953,18 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                         <MessageSquare className="w-4 h-4" />
                         <span className="text-[8px] mt-0.5 font-bold">Whats</span>
                       </button>
+
+                      {storeSettings?.osReviewMessageEnabled !== false && (
+                        <button
+                          type="button"
+                          onClick={() => setReviewModalOS(os)}
+                          className="flex flex-col items-center justify-center p-2 rounded-lg bg-amber-500/15 text-amber-400 active:scale-95 transition"
+                          title="Mensagem de avaliação pelo WhatsApp"
+                        >
+                          <Star className="w-4 h-4 fill-amber-400/30" />
+                          <span className="text-[8px] mt-0.5 font-bold">Avaliar</span>
+                        </button>
+                      )}
 
                       <button
                         type="button"
@@ -2256,6 +2281,16 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                             >
                               <MessageSquare className="app-action-icon" />
                             </button>
+                            {storeSettings?.osReviewMessageEnabled !== false && (
+                              <button
+                                type="button"
+                                onClick={() => setReviewModalOS(os)}
+                                className="p-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/20 transition active:scale-95"
+                                title="Mensagem de avaliação pelo WhatsApp"
+                              >
+                                <Star className="app-action-icon fill-amber-400/30" />
+                              </button>
+                            )}
                             <button
                               onClick={() => onPrintWorkOrder(os)}
                               className="p-1.5 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 transition"
@@ -4400,6 +4435,17 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                   <MessageSquare className="w-3.5 h-3.5" />
                   <span>WhatsApp</span>
                 </button>
+                {storeSettings?.osReviewMessageEnabled !== false && (
+                  <button
+                    type="button"
+                    onClick={() => setReviewModalOS(viewingOS)}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition shadow-md shadow-amber-600/20 active:scale-[0.98]"
+                    title="Mensagem de avaliação pelo WhatsApp"
+                  >
+                    <Star className="w-3.5 h-3.5 fill-white text-white" />
+                    <span>Avaliação</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -4735,6 +4781,17 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                   <FileDown className="w-3.5 h-3.5" />
                   <span>Salvar como PDF</span>
                 </button>
+                {storeSettings?.osReviewMessageEnabled !== false && (
+                  <button
+                    type="button"
+                    onClick={() => setReviewModalOS(viewingOS)}
+                    className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-amber-600/20 active:scale-[0.98]"
+                    title="Mensagem de avaliação pelo WhatsApp"
+                  >
+                    <Star className="w-3.5 h-3.5 fill-white text-white" />
+                    <span>Avaliação</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onPrintWorkOrder(viewingOS)}
@@ -4780,6 +4837,17 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
           workOrder={whatsAppModalOS}
           storeSettings={storeSettings}
           customer={customers?.find((c) => c.id === whatsAppModalOS.customerId)}
+        />
+      )}
+
+      {/* Modal de Mensagem de Avaliação da Ordem de Serviço via WhatsApp */}
+      {reviewModalOS && (
+        <SendWorkOrderReviewModal
+          isOpen={Boolean(reviewModalOS)}
+          onClose={() => setReviewModalOS(null)}
+          workOrder={reviewModalOS}
+          storeSettings={storeSettings}
+          customer={customers?.find((c) => c.id === reviewModalOS.customerId)}
         />
       )}
 

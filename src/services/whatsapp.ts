@@ -300,6 +300,8 @@ export const DEFAULT_POS_SALE_MESSAGE = `Olá, *{cliente}*! 👋\n\nAgradecemos 
 
 export const DEFAULT_POS_REVIEW_MESSAGE = `Olá, *{cliente}*! 👋\n\nAgradecemos imensamente pela preferência em realizar sua compra conosco na *{loja}*! 🤝🎉\n\nSua opinião é fundamental para aprimorarmos continuamente nosso atendimento. Você poderia nos avaliar e contar como foi sua experiência?\n\n{link_avaliacao}Se puder nos deixar uma avaliação 5 estrelas, ficaremos muito felizes e gratos pelo seu feedback! ⭐⭐⭐⭐⭐\n\nQualquer dúvida ou caso necessite de suporte com a garantia dos produtos, estamos sempre à sua inteira disposição!\n\n_{loja} - Volte sempre!_ 🙏`;
 
+export const DEFAULT_OS_REVIEW_MESSAGE = `Olá, *{cliente}*! 👋\n\nAgradecemos pela confiança em nossos serviços na *{loja}*! 🤝🎉\n\nSeu equipamento *{equipamento}* (Ordem de Serviço *#{numero_os}*) foi finalizado e entregue.\n\nSua opinião é muito importante para nós! Você poderia nos avaliar e contar com sinceridade como foi sua experiência com o nosso atendimento e serviço?\n\n{link_avaliacao}Qualquer dúvida ou caso necessite de suporte com a garantia dos serviços, estamos sempre à sua inteira disposição!\n\n_{loja} - Sempre à sua disposição!_ 🙏`;
+
 /**
  * Substitui tags dinâmicas como {cliente}, {numero_os}, {equipamento}, {valor}, {loja}, {telefone}
  */
@@ -467,6 +469,70 @@ export const sendSaleReviewViaWhatsApp = async (
   } catch (err) {
     console.warn('[WhatsApp] Erro ao enviar mensagem de avaliação desktop:', err);
   }
+
+  launchWhatsAppConversation(desktopUrl, webUrl, preferredPlatform, targetWindow);
+  return { success: true, mode: 'sent' };
+};
+
+/**
+ * Formata a mensagem personalizada para solicitação de avaliação sincera pós-serviço da Ordem de Serviço.
+ */
+export const formatWorkOrderReviewCustomMessage = (
+  os: WorkOrder,
+  store?: StoreSettings,
+  customer?: Customer
+): string => {
+  const template = store?.osReviewMessageTemplate?.trim() || DEFAULT_OS_REVIEW_MESSAGE;
+  const storeName = store?.tradeName || store?.storeName || 'Power Tech';
+  const phone = store?.phone || store?.whatsapp || '';
+  const clientName = (os.customerName || customer?.name || 'Cliente').trim();
+  const equipment = [os.brand, os.model].filter(Boolean).join(' ') || (os.equipmentType ? os.equipmentType.toUpperCase() : 'Equipamento');
+  const total = Number(os.total || 0).toFixed(2);
+  const reviewLink = store?.googleReviewUrl?.trim()
+    ? `⭐ *Deixe sua avaliação no link abaixo:*\n${store.googleReviewUrl.trim()}\n\n`
+    : '';
+
+  return parseMessageTemplate(template, {
+    cliente: clientName,
+    numero_os: os.number,
+    equipamento: equipment,
+    valor: `R$ ${total}`,
+    loja: storeName,
+    telefone: phone,
+    link_avaliacao: reviewLink
+  }).replace(/\n{3,}/g, '\n\n');
+};
+
+/**
+ * Prepara e abre a mensagem de avaliação de Ordem de Serviço no WhatsApp (sem envio automático).
+ * O texto é posicionado na caixa de mensagem da conversa pronta para revisão e envio pelo operador.
+ */
+export const sendWorkOrderReviewViaWhatsApp = async (
+  os: WorkOrder,
+  phone?: string,
+  customMessage?: string,
+  storeSettings?: StoreSettings,
+  customer?: Customer,
+  preferredPlatform: 'auto' | 'web' | 'desktop' = 'auto',
+  targetWindow?: Window | null
+): Promise<{ success: boolean; mode: string }> => {
+  const storeDdd = storeSettings?.phone || storeSettings?.whatsapp || '';
+  const targetPhone = cleanAndFormatPhoneNumber(
+    phone || os.customerPhone || customer?.whatsapp || customer?.phone,
+    storeDdd
+  );
+
+  const messageToSend = customMessage !== undefined
+    ? customMessage
+    : formatWorkOrderReviewCustomMessage(os, storeSettings, customer);
+
+  const encodedMsg = encodeURIComponent(messageToSend);
+  const webUrl = targetPhone
+    ? `https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodedMsg}`
+    : `https://web.whatsapp.com`;
+  const desktopUrl = targetPhone
+    ? `whatsapp://send?phone=${targetPhone}&text=${encodedMsg}`
+    : `whatsapp://${encodedMsg ? `send?text=${encodedMsg}` : ''}`;
 
   launchWhatsAppConversation(desktopUrl, webUrl, preferredPlatform, targetWindow);
   return { success: true, mode: 'sent' };

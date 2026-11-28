@@ -82,7 +82,7 @@ import {
   ExpenseCategoryDef
 } from '../types';
 import { DEFAULT_EXPENSE_CATEGORIES, resolveCategoryIcon } from './ExpensesView';
-import { DEFAULT_OS_READY_MESSAGE, DEFAULT_OS_DELIVERED_MESSAGE, DEFAULT_POS_SALE_MESSAGE, DEFAULT_POS_REVIEW_MESSAGE } from '../services/whatsapp';
+import { DEFAULT_OS_READY_MESSAGE, DEFAULT_OS_DELIVERED_MESSAGE, DEFAULT_POS_SALE_MESSAGE, DEFAULT_POS_REVIEW_MESSAGE, DEFAULT_OS_REVIEW_MESSAGE } from '../services/whatsapp';
 import { lookupCNPJ, formatCNPJ, cleanDigits } from '../services/cnpj';
 import { api, setAuthToken } from '../services/api';
 import {
@@ -227,6 +227,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     osReadyMessageTemplate: settings.osReadyMessageTemplate ?? DEFAULT_OS_READY_MESSAGE,
     osDeliveredMessageEnabled: settings.osDeliveredMessageEnabled ?? false,
     osDeliveredMessageTemplate: settings.osDeliveredMessageTemplate ?? DEFAULT_OS_DELIVERED_MESSAGE,
+    osReviewMessageEnabled: settings.osReviewMessageEnabled ?? true,
+    osReviewMessageTemplate: settings.osReviewMessageTemplate ?? DEFAULT_OS_REVIEW_MESSAGE,
     posSaleMessageEnabled: settings.posSaleMessageEnabled ?? false,
     posSaleMessageTemplate: settings.posSaleMessageTemplate ?? DEFAULT_POS_SALE_MESSAGE,
     posReviewMessageEnabled: settings.posReviewMessageEnabled ?? true,
@@ -2319,6 +2321,108 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           setFormData({ ...formData, osDeliveredMessageTemplate: `${current} ${t.tag}` });
                         }}
                         className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-mono text-cyan-400 border border-slate-800 hover:border-cyan-500/50 transition cursor-pointer"
+                        title={t.desc}
+                      >
+                        {t.tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Mensagem de Avaliação da Ordem de Serviço (Pós-Serviço) */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Star className="w-4 h-4 text-amber-400" />
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Mensagem de Avaliação da Ordem de Serviço (Pós-Serviço)</h4>
+                    <p className="text-[10px] text-slate-400">
+                      Disponibiliza o botão e a ação &quot;Mensagem de avaliação&quot; nas Ordens de Serviço (desktop, mobile e visualização da OS) para solicitar um feedback honesto do cliente pelo WhatsApp.
+                    </p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.osReviewMessageEnabled !== false}
+                    onChange={(e) => setFormData({ ...formData, osReviewMessageEnabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-300 font-semibold">
+                  Status da Ação de Avaliação na OS:
+                </span>
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${formData.osReviewMessageEnabled !== false ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                  {formData.osReviewMessageEnabled !== false ? '✓ ATIVADA (Disponível nas ações da OS)' : 'DESATIVADA'}
+                </span>
+              </div>
+
+              {/* Link de Avaliação da Loja (Google Meu Negócio / Avaliação Online) */}
+              <div>
+                <label className="text-[11px] text-slate-300 font-medium block mb-1">
+                  Link de Avaliação da Loja (Google Meu Negócio / Avaliação Online) <span className="text-slate-500 text-[10px]">(Opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.googleReviewUrl || ''}
+                  onChange={(e) => setFormData({ ...formData, googleReviewUrl: e.target.value })}
+                  placeholder="Ex: https://g.page/r/.../review"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-sans"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Se preenchido, esse link será inserido automaticamente onde estiver a tag <code className="text-amber-400 font-mono">{"{link_avaliacao}"}</code>.
+                </p>
+              </div>
+
+              {/* Campo da Mensagem Salva */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] text-slate-300 font-medium">
+                    Mensagem de Avaliação Salva para Edição
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, osReviewMessageTemplate: DEFAULT_OS_REVIEW_MESSAGE })}
+                    className="text-[10px] text-slate-400 hover:text-amber-400 underline transition cursor-pointer"
+                  >
+                    Restaurar mensagem padrão
+                  </button>
+                </div>
+                <textarea
+                  rows={5}
+                  value={formData.osReviewMessageTemplate ?? DEFAULT_OS_REVIEW_MESSAGE}
+                  onChange={(e) => setFormData({ ...formData, osReviewMessageTemplate: e.target.value })}
+                  placeholder="Digite a mensagem de avaliação da OS para o WhatsApp..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-sans leading-relaxed"
+                />
+
+                {/* Tags Dinâmicas */}
+                <div className="pt-2">
+                  <span className="text-[10px] text-slate-400 block mb-1">Tags dinâmicas disponíveis (clique para inserir no texto):</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { tag: '{cliente}', desc: 'Nome do cliente' },
+                      { tag: '{numero_os}', desc: 'Nº da Ordem de Serviço' },
+                      { tag: '{equipamento}', desc: 'Marca e Modelo / Equipamento' },
+                      { tag: '{valor}', desc: 'Valor total da OS' },
+                      { tag: '{loja}', desc: 'Nome da loja' },
+                      { tag: '{telefone}', desc: 'Telefone da loja' },
+                      { tag: '{link_avaliacao}', desc: 'Link de avaliação da loja' }
+                    ].map((t) => (
+                      <button
+                        key={t.tag}
+                        type="button"
+                        onClick={() => {
+                          const current = formData.osReviewMessageTemplate ?? DEFAULT_OS_REVIEW_MESSAGE;
+                          setFormData({ ...formData, osReviewMessageTemplate: `${current} ${t.tag}` });
+                        }}
+                        className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-mono text-amber-400 border border-slate-800 hover:border-amber-500/50 transition cursor-pointer"
                         title={t.desc}
                       >
                         {t.tag}

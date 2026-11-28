@@ -414,6 +414,8 @@ export interface StoreSettings {
   osDeliveredMessageTemplate?: string;
   osReadyMessageEnabled?: boolean;
   osReadyMessageTemplate?: string;
+  osReviewMessageEnabled?: boolean;
+  osReviewMessageTemplate?: string;
   posSaleMessageEnabled?: boolean;
   posSaleMessageTemplate?: string;
   posReviewMessageEnabled?: boolean;
