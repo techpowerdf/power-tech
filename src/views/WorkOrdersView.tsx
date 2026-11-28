@@ -1043,28 +1043,30 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
       const failedUploads: { photo: StagedPhoto; error: string }[] = [];
       const successfulIds: string[] = [];
 
-      for (let i = 0; i < stagedPhotos.length; i++) {
-        const p = stagedPhotos[i];
-        setStagedUploadProgressText(`Enviando fotografia ${i + 1} de ${stagedPhotos.length} para o armazenamento seguro...`);
-        try {
-          await api.uploadWorkOrderPhoto(targetOsId, {
-            stage: p.stage,
-            fileName: p.fileName,
-            base64Data: p.base64Data,
-            mimeType: p.mimeType
-          });
-          successfulIds.push(p.id);
-        } catch (uploadErr: any) {
-          console.error(`Falha no upload da foto ${p.fileName}:`, uploadErr);
-          failedUploads.push({
-            photo: p,
-            error: uploadErr.message || 'Erro no envio'
-          });
+      try {
+        for (let i = 0; i < stagedPhotos.length; i++) {
+          const p = stagedPhotos[i];
+          setStagedUploadProgressText(`Enviando fotografia ${i + 1} de ${stagedPhotos.length} para o armazenamento seguro...`);
+          try {
+            await api.uploadWorkOrderPhoto(targetOsId, {
+              stage: p.stage,
+              fileName: p.fileName,
+              base64Data: p.base64Data,
+              mimeType: p.mimeType
+            });
+            successfulIds.push(p.id);
+          } catch (uploadErr: any) {
+            console.error(`Falha no upload da foto ${p.fileName}:`, uploadErr);
+            failedUploads.push({
+              photo: p,
+              error: uploadErr.message || 'Erro no envio'
+            });
+          }
         }
+      } finally {
+        setIsUploadingStagedPhotos(false);
+        setStagedUploadProgressText('');
       }
-
-      setIsUploadingStagedPhotos(false);
-      setStagedUploadProgressText('');
 
       if (failedUploads.length === 0) {
         setStagedPhotos([]);

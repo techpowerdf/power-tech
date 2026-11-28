@@ -653,13 +653,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       return;
     }
 
-    if (!editingUserId && (!userFormData.password || userFormData.password.length < 4)) {
-      setUserModalFeedback('Para novo usuário, a senha deve ter no mínimo 4 caracteres.');
+    if (!editingUserId && (!userFormData.password || userFormData.password.length < 6)) {
+      setUserModalFeedback('Para novo usuário, a senha deve ter no mínimo 6 caracteres.');
       return;
     }
 
-    if (editingUserId && userFormData.password && userFormData.password.length < 4) {
-      setUserModalFeedback('A nova senha deve ter no mínimo 4 caracteres.');
+    if (editingUserId && userFormData.password && userFormData.password.length < 6) {
+      setUserModalFeedback('A nova senha deve ter no mínimo 6 caracteres.');
       return;
     }
 
@@ -3037,7 +3037,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </label>
                       <input
                         type="password"
-                        placeholder={editingUserId ? 'Manter senha atual...' : 'Mínimo 4 caracteres'}
+                        placeholder={editingUserId ? 'Manter senha atual...' : 'Mínimo 6 caracteres'}
                         value={userFormData.password}
                         onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-purple-500"

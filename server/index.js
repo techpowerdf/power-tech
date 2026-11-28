@@ -3,7 +3,8 @@ const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { getDatabase, saveDatabase, ensureDatabaseLoaded } = require('./db');
+const dbModule = require('./db');
+const { getDatabase, saveDatabase, ensureDatabaseLoaded } = dbModule;
 const { executeBackup, checkDailyBackup, restoreBackup, listPhysicalBackups } = require('./backupService');
 const { emitInvoice } = require('./fiscalService');
 const { sendViaWhatsAppDesktop, sendSalePdfViaWhatsAppDesktop, sendWorkOrderPdfViaWhatsAppDesktop } = require('./whatsappDesktopService');
@@ -245,10 +246,7 @@ app.post('/api/auth/login', (req, res) => {
     );
   }
 
-  const isMatch = user && (
-    verifyPassword(password, user.passwordHash) ||
-    (password === 'admin123' && (user.role === 'admin' || cleanUser === 'admin' || cleanUser === 'powertech'))
-  );
+  const isMatch = user && verifyPassword(password, user.passwordHash);
 
   if (!isMatch) {
     console.log(`[Auth Login] Falha no login para usuário: "${username}"`);
@@ -1666,16 +1664,82 @@ app.delete('/api/work-orders/:id', requireAuth, requireAdminPassword, async (req
     return res.status(403).json({ error: 'Você não possui permissão para excluir Ordens de Serviço.' });
   }
 
-  const db = getDatabase();
-  const initialLength = (db.workOrders || []).length;
-  db.workOrders = (db.workOrders || []).filter(o => o.id !== req.params.id);
-
-  if (db.workOrders.length === initialLength) {
-    return res.status(404).json({ error: 'Ordem de Serviço não encontrada' });
+  const rawParam = req.params.id;
+  const targetParam = rawParam !== undefined && rawParam !== null ? String(rawParam).trim() : '';
+  if (!targetParam) {
+    return res.status(400).json({ error: 'Identificador de Ordem de Serviço não informado.' });
   }
 
-  await saveDatabase(db);
-  res.json({ success: true, message: 'Ordem de Serviço removida com sucesso' });
+  const db = getDatabase();
+  const list = db.workOrders || [];
+  const initialLength = list.length;
+  const targetLower = targetParam.toLowerCase();
+
+  // 1. Prioriza correspondência exata do ID interno
+  let matches = list.filter(o => o && String(o.id || '').trim().toLowerCase() === targetLower);
+
+  // 2. Se não encontrar pelo ID interno, busca por correspondência exata de número sequencial
+  if (matches.length === 0) {
+    matches = list.filter(o => o && String(o.number || '').trim() === targetParam);
+  }
+
+  // 3. Se não encontrar nenhum registro, retorna HTTP 404
+  if (matches.length === 0) {
+    return res.status(404).json({ error: 'Ordem de Serviço não encontrada.' });
+  }
+
+  // 4. Se encontrar mais de um registro (ambiguidade), retorna HTTP 409 e não exclui nada
+  if (matches.length > 1) {
+    return res.status(409).json({
+      error: 'Ambiguidade detectada: múltiplos registros encontrados para este identificador. Operação cancelada por segurança.',
+      code: 'AMBIGUOUS_IDENTIFIER'
+    });
+  }
+
+  // 5. Objeto único identificado
+  const targetOS = matches[0];
+
+  // 6. Utiliza list.indexOf(targetOS) para localizar o objeto efetivamente encontrado e impede índice -1
+  const targetIndex = list.indexOf(targetOS);
+  if (targetIndex === -1) {
+    return res.status(500).json({ error: 'Falha interna ao localizar o registro na lista para remoção.' });
+  }
+
+  // 7. Abordagem B: Imutabilidade antes do salvamento
+  // Não modifica o array list nem o objeto db antes da confirmação da gravação
+  const updatedWorkOrders = list.filter((_, idx) => idx !== targetIndex);
+
+  // 8. Confirma que a nova lista possui exatamente um registro a menos
+  if (updatedWorkOrders.length !== initialLength - 1) {
+    return res.status(500).json({ error: 'Erro de integridade: a remoção afetou quantidade inesperada de registros.' });
+  }
+
+  // 9. Cria novo objeto de banco com a nova lista imutável
+  const updatedDb = {
+    ...db,
+    workOrders: updatedWorkOrders
+  };
+
+  // 10. Persistência com proteção total de consistência
+  try {
+    await dbModule.saveDatabase(updatedDb);
+  } catch (saveError) {
+    console.error('[WorkOrders API] Falha na persistência ao excluir Ordem de Serviço:', saveError.message);
+    return res.status(500).json({
+      error: 'Falha ao salvar as alterações no banco de dados. A Ordem de Serviço foi mantida íntegra.'
+    });
+  }
+
+  // 11. Retorna na resposta o ID e o número da OS efetivamente excluída
+  res.json({
+    success: true,
+    message: 'Ordem de Serviço removida com sucesso.',
+    deletedWorkOrder: {
+      id: targetOS.id,
+      number: targetOS.number,
+      customerName: targetOS.customerName
+    }
+  });
 });
 
 // ==========================================

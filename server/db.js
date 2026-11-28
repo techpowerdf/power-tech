@@ -551,7 +551,7 @@ function getCurrentDbVersion() {
 // Atomic save assíncrono com mutex de processo e controle de concorrência otimista (OCC)
 async function saveDatabase(data) {
   return new Promise((resolve, reject) => {
-    writeQueue = writeQueue.then(async () => {
+    const runSave = async () => {
       try {
         // Se o Supabase estiver configurado, persiste na nuvem com controle otimista de versão
         if (isSupabaseConfigured()) {
@@ -578,7 +578,15 @@ async function saveDatabase(data) {
       } catch (err) {
         reject(err);
       }
-    });
+    };
+
+    // Recuperação independente da fila:
+    // Garante que uma falha anterior não deixe a fila permanentemente bloqueada,
+    // enquanto o erro da operação em si continua sendo reportado ao chamador via reject(err).
+    writeQueue = writeQueue
+      .catch(() => {})
+      .then(runSave)
+      .catch(() => {});
   });
 }
 

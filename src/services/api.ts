@@ -85,7 +85,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
-    if (res.status === 401 && !url.startsWith('/auth/login') && !url.startsWith('/public/')) {
+    if (res.status === 401 && !url.startsWith('/auth/login') && !url.startsWith('/public/') && !url.startsWith('/auth/verify-admin-password')) {
       if (onUnauthorizedCallback) onUnauthorizedCallback();
     }
     let errorMsg = `Erro ${res.status}: ${res.statusText}`;

@@ -80,6 +80,14 @@ export const WorkOrderPhotosGallery: React.FC<WorkOrderPhotosGalleryProps> = ({
   const [photoToDelete, setPhotoToDelete] = useState<WorkOrderPhoto | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
+  const isMountedRef = useRef<boolean>(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Inputs nativos
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -157,71 +165,82 @@ export const WorkOrderPhotosGallery: React.FC<WorkOrderPhotosGalleryProps> = ({
     setUploadProgress({
       total: fileArray.length,
       current: 0,
-      stageMessage: 'Iniciando compressão de imagens...'
+      stageMessage: 'Iniciando otimização das fotografias...'
     });
 
-    const newPhotos: WorkOrderPhoto[] = [];
+    let uploadedCount = 0;
 
-    for (let i = 0; i < fileArray.length; i++) {
-      const file = fileArray[i];
-      setUploadProgress({
-        total: fileArray.length,
-        current: i + 1,
-        stageMessage: `Otimizando foto ${i + 1} de ${fileArray.length}...`
-      });
-
-      try {
-        // Compressão via HTML5 Canvas
-        const compressed = await compressImage(file, file.name, {
-          maxWidth: 1600,
-          maxHeight: 1600,
-          quality: 0.82,
-          mimeType: 'image/jpeg'
-        });
+    try {
+      for (let i = 0; i < fileArray.length; i++) {
+        if (!isMountedRef.current) break;
+        const file = fileArray[i];
 
         setUploadProgress({
           total: fileArray.length,
           current: i + 1,
-          stageMessage: `Enviando foto ${i + 1} de ${fileArray.length} (${formatFileSize(compressed.compressedSizeBytes)})...`
+          stageMessage: `Otimizando foto ${i + 1} de ${fileArray.length}...`
         });
 
-        // Upload para backend / Supabase
-        const res = await api.uploadWorkOrderPhoto(workOrder.id, {
-          stage: uploadStage,
-          fileName: compressed.fileName,
-          base64Data: compressed.base64Data,
-          mimeType: compressed.mimeType
-        });
+        try {
+          // Compressão via HTML5 Canvas
+          const compressed = await compressImage(file, file.name, {
+            maxWidth: 1600,
+            maxHeight: 1600,
+            quality: 0.82,
+            mimeType: 'image/jpeg'
+          });
 
-        if (res.success && res.photo) {
-          newPhotos.push(res.photo);
+          if (!isMountedRef.current) break;
+
+          setUploadProgress({
+            total: fileArray.length,
+            current: i + 1,
+            stageMessage: `Enviando foto ${i + 1} de ${fileArray.length} (${formatFileSize(compressed.compressedSizeBytes)})...`
+          });
+
+          // Upload para backend / Supabase
+          const res = await api.uploadWorkOrderPhoto(workOrder.id, {
+            stage: uploadStage,
+            fileName: compressed.fileName,
+            base64Data: compressed.base64Data,
+            mimeType: compressed.mimeType
+          });
+
+          if (res.success && res.photo && isMountedRef.current) {
+            uploadedCount++;
+            // Atualização incremental imediata da galeria
+            setPhotos((prev) => {
+              const updated = [...prev, res.photo];
+              if (onPhotosUpdated) {
+                onPhotosUpdated(updated);
+              }
+              return updated;
+            });
+          }
+        } catch (err: any) {
+          console.error('Erro no upload de foto:', err);
+          if (isMountedRef.current) {
+            setFeedback({
+              type: 'error',
+              message: `Erro ao enviar ${file.name}: ${err.message}`
+            });
+          }
         }
-      } catch (err: any) {
-        console.error('Erro no upload de foto:', err);
+      }
+
+      if (uploadedCount > 0 && isMountedRef.current) {
         setFeedback({
-          type: 'error',
-          message: `Erro ao enviar ${file.name}: ${err.message}`
+          type: 'success',
+          message: `${uploadedCount} ${uploadedCount === 1 ? 'fotografia adicionada' : 'fotografias adicionadas'} com sucesso!`
         });
       }
-    }
-
-    if (newPhotos.length > 0) {
-      const updatedList = [...photos, ...newPhotos];
-      setPhotos(updatedList);
-      if (onPhotosUpdated) {
-        onPhotosUpdated(updatedList);
+    } finally {
+      if (isMountedRef.current) {
+        setUploadProgress(null);
+        if (cameraInputRef.current) cameraInputRef.current.value = '';
+        if (galleryInputRef.current) galleryInputRef.current.value = '';
       }
-      setFeedback({
-        type: 'success',
-        message: `${newPhotos.length} ${newPhotos.length === 1 ? 'fotografia adicionada' : 'fotografias adicionadas'} com sucesso!`
-      });
     }
-
-    setUploadProgress(null);
-
-    // Reseta inputs de arquivo para permitir novo upload do mesmo arquivo se desejado
-    if (cameraInputRef.current) cameraInputRef.current.value = '';
-    if (galleryInputRef.current) galleryInputRef.current.value = '';
   };
 
   // Drag and drop handlers
@@ -355,7 +374,7 @@ export const WorkOrderPhotosGallery: React.FC<WorkOrderPhotosGalleryProps> = ({
           <button
             type="button"
             onClick={() => cameraInputRef.current?.click()}
-            disabled={loading || !!uploadProgress}
+            disabled={!!uploadProgress}
             className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 active:scale-95 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm shadow-sky-600/30 disabled:opacity-50 cursor-pointer"
             title="Tirar foto diretamente pela câmera do celular"
           >
@@ -366,7 +385,7 @@ export const WorkOrderPhotosGallery: React.FC<WorkOrderPhotosGalleryProps> = ({
           <button
             type="button"
             onClick={() => galleryInputRef.current?.click()}
-            disabled={loading || !!uploadProgress}
+            disabled={!!uploadProgress}
             className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 border border-slate-700/80 disabled:opacity-50 cursor-pointer"
             title="Selecionar fotos da galeria ou computador"
           >

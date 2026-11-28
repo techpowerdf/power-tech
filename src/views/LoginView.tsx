@@ -12,8 +12,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
   onLoginSuccess,
   storeName = 'Power Tech'
 }) => {
-  const [username, setUsername] = useState<string>('admin');
-  const [password, setPassword] = useState<string>('admin123');
+  const [username, setUsername] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -93,9 +93,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   type="text"
                   required
                   autoFocus
+                  autoComplete="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Ex: admin"
+                  placeholder="Digite seu usuário"
                   className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none transition normal-case"
                   style={{ textTransform: 'none' }}
                 />
@@ -111,6 +112,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
@@ -146,13 +148,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
               )}
             </button>
           </form>
-
-          {/* Dica para primeiro acesso */}
-          <div className="mt-5 pt-4 border-t border-slate-850 text-center">
-            <p className="text-[11px] text-slate-500">
-              Primeiro acesso padrão: <span className="text-slate-300 font-mono font-semibold">admin</span> / senha: <span className="text-slate-300 font-mono font-semibold">admin123</span>
-            </p>
-          </div>
         </div>
 
         {/* Rodapé de Segurança */}

@@ -189,11 +189,9 @@ function validateAdminPassword(password) {
   const db = getDatabase();
   const activeAdmins = (db.users || []).filter((u) => u.role === 'admin' && u.active !== false);
   if (activeAdmins.length > 0) {
-    const matches = activeAdmins.some((admin) => verifyPassword(password, admin.passwordHash));
-    if (matches) return true;
+    return activeAdmins.some((admin) => verifyPassword(password, admin.passwordHash));
   }
-  const fallback = process.env.INITIAL_ADMIN_PASSWORD || 'admin123';
-  return password === fallback || password === 'admin123';
+  return false;
 }
 
 /**
