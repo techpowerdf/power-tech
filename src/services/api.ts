@@ -70,18 +70,39 @@ function buildAdminHeader(adminPassword?: string): Record<string, string> {
 }
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const { headers: customHeaders, ...restOptions } = options || {};
   const token = getAuthToken();
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
   const adminHeaders: Record<string, string> = tempAdminPassword ? { 'x-admin-password': encodeURIComponent(tempAdminPassword) } : {};
 
+  const mergedHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...authHeaders,
+    ...adminHeaders
+  };
+
+  if (customHeaders) {
+    if (typeof Headers !== 'undefined' && customHeaders instanceof Headers) {
+      customHeaders.forEach((value, key) => {
+        mergedHeaders[key] = value;
+      });
+    } else if (Array.isArray(customHeaders)) {
+      customHeaders.forEach(([key, value]) => {
+        mergedHeaders[key] = value;
+      });
+    } else {
+      Object.assign(mergedHeaders, customHeaders);
+    }
+  }
+
+  // Preservar sempre o cabeçalho Authorization quando existir um token JWT válido
+  if (token && !mergedHeaders['Authorization']) {
+    mergedHeaders['Authorization'] = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${BASE_URL}${url}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-      ...adminHeaders,
-      ...options?.headers
-    },
-    ...options
+    ...restOptions,
+    headers: mergedHeaders
   });
 
   if (!res.ok) {
